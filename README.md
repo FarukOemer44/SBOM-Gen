@@ -17,9 +17,14 @@ npm install
 npm start            # API on :5178 and UI on :5200 in parallel
 ```
 
-Open <http://localhost:5200>. The database starts empty — that is intentional.
+Open <http://localhost:5200>. **The database ships with the repository**
+(`server/sbom.db`), so the product, both versions, the imported SBOMs and the findings are there
+immediately — nothing to set up first.
 
-### First run, end to end (5 minutes)
+To start from scratch instead, delete `server/sbom.db` before the first start; the server creates
+an empty one and you can walk through the flow below yourself.
+
+### Walking the flow yourself (5 minutes, on an empty database)
 
 1. **Create a product.** Click *Neues Produkt anlegen*, e.g. `ACME IoT Gateway`, version `2.4.0`.
 2. **Import the SBOM.** Either attach it right in the product dialog, or open the *SBOMs* tab and
