@@ -119,3 +119,13 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 .fseg { flex: 1 1 0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s; border-radius: 6px; }
 .fseg:hover { background: rgba(18,152,255,0.06); }
 .fseg.active { background: #fff; color: #1F1F1F; }
+
+/* Auswahlmenü (Versionen) */
+.popmenu { position: absolute; top: 42px; left: 0; z-index: 40; min-width: 200px; background: #fff;
+  border: 1px solid #E4E9F0; border-radius: 11px; box-shadow: 0 10px 34px rgba(11,25,40,0.16); padding: 5px; }
+.popitem { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px;
+  font-size: 13.5px; color: #1F2937; cursor: pointer; white-space: nowrap; }
+.popitem:hover { background: #F2F7FD; }
+.popitem.active { color: #1298ff; font-weight: 600; background: rgba(18,152,255,0.07); }
+.popdel { display: inline-flex; padding: 3px; border-radius: 6px; color: #C2CCD8; }
+.popdel:hover { background: #FDECEC; color: #DC2626; }

@@ -129,6 +129,16 @@ const EN = {
   'Erste Version': 'First version',
   'Versionsbezeichnung': 'Version label',
   'Neue Version —': 'New version —',
+  'Hat sich die Softwarezusammensetzung geändert?': 'Has the software composition changed?',
+  'Nein — SBOM unverändert': 'No — SBOM unchanged',
+  'Komponenten und der SBOM-Stand aus': 'Components and the SBOM snapshot from',
+  'werden übernommen.': 'are carried over.',
+  'Ja — neue SBOM hochladen': 'Yes — upload a new SBOM',
+  'Hardware wird übernommen (steht nicht in der SBOM), die Software kommt aus der neuen Datei.':
+    'Hardware is carried over (it is not part of an SBOM); the software comes from the new file.',
+  'Datei wählen': 'Choose file',
+  'CycloneDX- oder SPDX-JSON': 'CycloneDX or SPDX JSON',
+
   'Produkt mit digitalen Elementen (Art. 3 Nr. 1). Die Konformität hängt an der Version (Anhang VII Nr. 1 Buchst. b).':
     'Product with digital elements (Art. 3(1)). Conformity attaches to the version (Annex VII No. 1(b)).',
   'Jede Version führt Komponenten, SBOMs und Funde getrennt.':
@@ -148,6 +158,36 @@ const EN = {
     'A component is software or hardware (Art. 3(6)). Hardware belongs in the inventory, not in the SBOM (Art. 3(39)).',
   'Hardware: kein SBOM-Eintrag; Schwachstellen kommen über Lieferanten-Advisories (Sorgfalts-Baseline, Art. 13 Abs. 5 / ENISA 4.14) — Identifikation optional über cpe.':
     'Hardware: no SBOM entry. Vulnerabilities arrive through supplier advisories (due diligence baseline, Art. 13(5) / ENISA 4.14) — identification via cpe is optional.',
+  'Die Zusammensetzung wird je Version geführt.': 'Composition is tracked per version.',
+  'Hardware und Software stehen im Inventar; in die SBOM gehört nur Software.':
+    'Hardware and software live in the inventory; only software belongs in the SBOM.',
+  'Advisory-Entwurf ↓': 'Advisory draft ↓',
+  'Herunterladen': 'Download',
+  'Für Meldungen, die außerhalb des Scans hereinkommen — per Mail, Lieferanten-Advisory oder Hinweis von außen.':
+    'For reports arriving outside the scan — by email, a supplier advisory or an external notification.',
+  'Neu hinzugekommen': 'Newly added',
+  'Komponenten, SBOMs und Funde hängen an der Produktversion. Lege ein Produkt mit seiner ersten Version an und importiere anschließend die SBOM, die dein Build erzeugt hat — eine Beispiel-SBOM liegt im Ordner':
+    'Components, SBOMs and findings attach to the product version. Create a product with its first version, then import the SBOM your build produced — an example SBOM sits in',
+  'Sorgfalt': 'Due diligence',
+  'aktiv ausgenutzt': 'actively exploited',
+  'Ja': 'Yes',
+  'Ja — verlässliche Nachweise erforderlich': 'Yes — reliable evidence required',
+  'Eigene Tests': 'Own testing',
+  'Hinweis von außen': 'External notification',
+  'Nachweis: worauf stützt sich die Einstufung?': 'Evidence: what is this assessment based on?',
+  'Version löschen?': 'Delete version?',
+  'Gespeichert': 'Saved',
+  'Scan-Historie': 'Scan history',
+  'Jeder Abgleich wird protokolliert — wann er lief, wie viele Komponenten geprüft wurden und was dabei herauskam.':
+    'Every scan is logged — when it ran, how many components were checked and what came out of it.',
+  'Zeitpunkt': 'When',
+  'Quelle': 'Source',
+  'Geprüft': 'Checked',
+  'Neu': 'New',
+  'Aktualisiert': 'Updated',
+  'Ohne Funde': 'No findings',
+  'Sorgfalt offen': 'Due diligence open',
+  'Filter zurücksetzen': 'Reset filters',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',

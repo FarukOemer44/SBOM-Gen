@@ -116,15 +116,23 @@ app.delete('/api/products/:id', (req, res) => {
 })
 
 app.post('/api/products/:id/versions', (req, res) => {
-  const { version, copyFrom } = req.body
+  // mode steuert, was aus der Vorversion uebernommen wird:
+  //   'unchanged' — Zusammensetzung unveraendert: alle Komponenten UND der SBOM-Stand
+  //                 werden uebernommen; die neue Version ist damit sofort belegt
+  //                 (Anhang I Teil II Nr. 1 verlangt die SBOM je Produktversion).
+  //   'new_sbom'  — Software hat sich geaendert: nur Hardware wird uebernommen,
+  //                 weil sie nicht in der SBOM steht (Art. 3 Nr. 39); die Software
+  //                 kommt aus der neuen SBOM, die der Aufrufer anschliessend importiert.
+  const { version, copyFrom, mode = 'unchanged' } = req.body
   if (!version?.trim()) return res.status(400).json({ error: 'Version fehlt' })
   const vid = uid()
   db.prepare('INSERT INTO versions (id, product_id, version, copied_from, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(vid, req.params.id, version.trim(), copyFrom || null, now())
-  let copied = 0
+
+  let copied = 0, sbomsCopied = 0
   if (copyFrom) {
-    // Versionierung: Komponenten der Vorversion übernehmen (Funde/SBOMs bewusst nicht — je Version eigener Stand)
-    const comps = db.prepare('SELECT * FROM components WHERE version_id = ?').all(copyFrom)
+    const all = db.prepare('SELECT * FROM components WHERE version_id = ?').all(copyFrom)
+    const comps = mode === 'new_sbom' ? all.filter(c => c.kind === 'hardware') : all
     const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
       is_core_function, dd_status, dd_note, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     for (const c of comps) {
@@ -132,9 +140,21 @@ app.post('/api/products/:id/versions', (req, res) => {
         c.is_core_function, c.dd_status, c.dd_note, c.source, now())
       copied++
     }
+    if (mode === 'unchanged') {
+      // Denselben SBOM-Stand auch fuer die neue Version dokumentieren.
+      const sb = db.prepare('SELECT * FROM sboms WHERE version_id = ? ORDER BY imported_at DESC LIMIT 1').get(copyFrom)
+      if (sb) {
+        db.prepare(`INSERT INTO sboms (id, version_id, file_name, format, depth, generated_at, imported_at,
+          provided_to_users, access_location, component_count, content)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid(), vid, sb.file_name, sb.format, sb.depth, sb.generated_at, now(),
+            sb.provided_to_users, sb.access_location, sb.component_count, sb.content)
+        sbomsCopied = 1
+      }
+    }
   }
-  audit('version.create', version + (copyFrom ? ' (Komponenten übernommen: ' + copied + ')' : ''))
-  res.json({ versionId: vid, copied })
+  audit('version.create', version.trim() + ' · ' + mode + ' · Komponenten: ' + copied + ' · SBOM: ' + sbomsCopied)
+  res.json({ versionId: vid, copied, sbomsCopied })
 })
 
 app.delete('/api/versions/:id', (req, res) => {

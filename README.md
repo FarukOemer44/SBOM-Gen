@@ -29,14 +29,36 @@ Open <http://localhost:5200>. The database starts empty — that is intentional.
    → 337 findings, roughly 59 critical / 130 high / 123 medium / 25 low. 319 of them arrive with
    a CVE number and a concrete fixed version, all 337 with links to the advisory, the NVD entry
    and the project.
-4. **Triage a finding.** Open any row in the *Funde* tab. The drawer already shows the CVE
-   number, the weakness class, which versions fix it and where the advisory lives — click a
-   version to adopt it as the remediation target. Then set affectedness (VEX), a decision and an
-   owner. Re-run the scan: your triage survives, only advisory data is refreshed.
-5. **Create a second version** with *+ Version* (copying the components), change a component
-   version, and look at the *Änderungen* tab: added / removed / version-changed, computed live.
+4. **Triage a finding.** Open any row in the *Findings* tab. The drawer shows the CVE number, the
+   weakness class, which versions fix it and where the advisory lives — click a version to adopt it
+   as the remediation target. **Everything saves as you go**: selections immediately, free text after
+   a short pause. There is no save button and nothing to cancel. Re-run the scan: your triage
+   survives, only advisory data is refreshed.
+5. **Create a second version** with *+ Version*. The dialog asks the one question that matters:
+   *has the software composition changed?*
+   - **No** → components and the SBOM snapshot are carried over, and the new version is documented
+     straight away.
+   - **Yes** → only hardware carries over (it is not part of an SBOM) and you upload the new SBOM
+     right there. Try it with `sboms/acme-iot-gateway-2.5.0.cdx.json`.
+
+   Then open the *Changes* tab: added / removed / version-changed, computed live from the two
+   inventories.
+6. **Look at the scan history** (button in the header): every scan with its timestamp, how many
+   components it checked and how many findings were new or refreshed.
 
 Separate processes if you prefer: `npm run server` and `npm run dev`.
+
+### What the interface does not do
+
+Products are not created here beyond the very first one — in the full product they come from the
+product module. There is no manual *add component* or *add finding* button either: components arrive
+through the SBOM, findings through the scan. Both remain available over the API
+(`POST /api/versions/:id/components`, `POST /api/versions/:id/findings`) for the cases that need
+them. Versions are managed in the version dropdown itself: click it to switch, use the bin icon
+next to a version to delete it (the last one cannot be deleted).
+
+The interface also carries no legal citations. They live in this README and in the code comments,
+where they belong for a developer — the screen stays a working surface.
 
 ### Language
 
@@ -58,21 +80,30 @@ No API key, no account, no local vulnerability database.
 
 ---
 
-## The bundled SBOM is real
+## The bundled SBOMs are real
 
-`sboms/acme-iot-gateway.cdx.json` — 1.1 MB, CycloneDX 1.6, **732 components, all with a purl**.
+Two snapshots of the same fictitious product, one release apart:
 
-It was not hand-written. It was generated with the official CycloneDX generator from a real,
+| File | Components | Findings | Story |
+|---|---|---|---|
+| `sboms/acme-iot-gateway.cdx.json` | 732 | 337 (59 critical) | the legacy state |
+| `sboms/acme-iot-gateway-2.5.0.cdx.json` | 740 | 238 (16 critical) | after a maintenance round |
+
+Between them: 63 packages upgraded, 21 dropped (including `vm2`, which alone carried 43 findings),
+29 added (`undici`, `pino` and their dependencies). That is what the *Changes* tab shows, and the
+drop from 59 to 16 critical findings is the point of the whole exercise.
+
+Neither was hand-written. Both were generated with the official CycloneDX generator from a real,
 installed dependency tree:
 
 ```bash
 npx @cyclonedx/cyclonedx-npm --omit dev --output-format JSON --output-file acme-iot-gateway.cdx.json
 ```
 
-The dependency list that produced it is included as
-[`sboms/acme-iot-gateway.package.json`](sboms/acme-iot-gateway.package.json) — around 90 direct
-dependencies pinned to versions from roughly 2020/21, the sort of stack a shipped device backend
-still runs. Everything in the file is genuine: real packages, real versions, real transitive
+The dependency lists that produced them are included next to each file
+(`*.package.json`) — around 90 direct dependencies, pinned to versions from roughly 2020/21 for the
+first snapshot and to patched versions for the second, the sort of stack a shipped device backend
+actually runs. Everything in the file is genuine: real packages, real versions, real transitive
 resolution, real purls. Only the product name on top is fictitious.
 
 That is what makes it useful as a fixture: the vulnerabilities it surfaces are real CVEs in real
@@ -272,7 +303,7 @@ Without that, upgrading `lodash@4.17.20` to `4.17.21` would read as "removed + a
 |---|---|---|
 | `GET` | `/api/bootstrap` | products and versions |
 | `POST` | `/api/products` | product plus first version |
-| `POST` | `/api/products/:id/versions` | new version, optionally copying components |
+| `POST` | `/api/products/:id/versions` | new version; `mode: 'unchanged'` copies components **and** the SBOM snapshot, `mode: 'new_sbom'` copies hardware only |
 | `DELETE` | `/api/products/:id` · `/api/versions/:id` | delete (cascades) |
 | `GET` | `/api/versions/:id` | components, sboms, findings, scans |
 | `GET` | `/api/versions/:id/diff` | comparison against the previous version |
