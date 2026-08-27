@@ -45,6 +45,29 @@ const INTAKE = [
 ]
 const intakeLabel = v => (INTAKE.find(x => x[0] === v) || [v, v])[1]
 
+// SBOM-Datei lesen und in eine Version importieren — genutzt von Produkt- und Versionsdialog.
+async function importSbomInto(versionId, file, call, t) {
+  const text = await file.text()
+  const jx = JSON.parse(text)
+  const raw = jx.components || jx.packages || []
+  if (!raw.length) throw new Error(t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.'))
+  const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
+  const directRefs = new Set((jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || []))
+  const list = raw.map(c => ({
+    name: c.name || '?', version: c.version || c.versionInfo || '',
+    purl: c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || '',
+    supplier: c.supplier?.name || c.publisher || (typeof c.supplier === 'string' ? c.supplier.replace(/^Organization: /, '') : '') || '',
+    license: (c.licenses && (c.licenses[0]?.license?.id || c.licenses[0]?.expression)) || c.licenseConcluded || '',
+    is_direct: directRefs.has(c['bom-ref']) ? 1 : 0,
+  }))
+  const fmt = jx.bomFormat ? 'CycloneDX ' + (jx.specVersion || '') : jx.spdxVersion ? 'SPDX ' + jx.spdxVersion : 'SBOM'
+  return call('POST', '/api/versions/' + versionId + '/sboms', {
+    fileName: file.name, format: fmt, depth: 'top_level',
+    generatedAt: jx.metadata?.timestamp || jx.creationInfo?.created || '',
+    components: list, content: text,
+  })
+}
+
 // Automatisches Speichern: Auswahl sofort, Freitext nach kurzer Pause.
 // Kein Speichern-Knopf, kein Abbrechen — was man aendert, ist gespeichert.
 function useAutoSave(url, initial, call) {
@@ -95,9 +118,17 @@ function NewProductModal({ onClose }) {
   const t = useT()
   const { call, setSel } = useStore()
   const [name, setName] = useState(''); const [hersteller, setHersteller] = useState(''); const [version, setVersion] = useState('1.0.0')
+  const [file, setFile] = useState(null)
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(null)
+  const fileRef = useRef(null)
   const save = async () => {
-    const res = await call('POST', '/api/products', { name, hersteller, version }, { reloadProducts: true })
-    setSel({ pid: res.productId, vid: res.versionId }); onClose()
+    setBusy(true); setErr(null)
+    try {
+      const res = await call('POST', '/api/products', { name, hersteller, version }, { reloadProducts: true })
+      if (file) await importSbomInto(res.versionId, file, call, t)   // erste Version gleich belegen
+      setSel({ pid: res.productId, vid: res.versionId })
+      onClose()
+    } catch (e) { setErr(String(e.message || e)) } finally { setBusy(false) }
   }
   return (
     <Modal onClose={onClose} width={480}>
@@ -109,9 +140,19 @@ function NewProductModal({ onClose }) {
       <input className="field" value={hersteller} onChange={e => setHersteller(e.target.value)} placeholder="z. B. Muster GmbH" />
       <div className="fieldlab">{t('Erste Version')}</div>
       <input className="field" value={version} onChange={e => setVersion(e.target.value)} />
+
+      <div className="fieldlab">{t('SBOM')} <span className="fund">{t('(optional — später jederzeit im Reiter SBOMs)')}</span></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button className="hb sm" onClick={() => fileRef.current?.click()}>{t('Datei wählen')}</button>
+        <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }}
+          onChange={e => { setFile(e.target.files[0] || null); setErr(null) }} />
+        <span className="muted">{file ? file.name : t('CycloneDX- oder SPDX-JSON')}</span>
+      </div>
+
+      {err && <div style={{ marginTop: 12 }}><Pill kind="red">{err}</Pill></div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
         <button className="hb" onClick={onClose}>{t('Abbrechen')}</button>
-        <button className="ab" disabled={!name.trim()} onClick={save}>{t('Anlegen')}</button>
+        <button className="ab" disabled={!name.trim() || busy} onClick={save}>{busy ? t('Bitte warten …') : t('Anlegen')}</button>
       </div>
     </Modal>
   )
@@ -950,7 +991,6 @@ export default function SbomTool() {
           {busy ? t('Bitte warten …') : t('CVE-Abgleich (OSV)')}
         </button>
         <button className="hb" onClick={() => setModal('scans')} disabled={!version}>{t('Scan-Historie')}</button>
-        <button className="ab" onClick={() => fileRef.current?.click()} disabled={!version}>{t('SBOM importieren')}</button>
         <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }}
           onChange={e => { if (e.target.files[0]) importSbom(e.target.files[0]); e.target.value = '' }} />
       </TitleBar>
@@ -1056,6 +1096,10 @@ export default function SbomTool() {
 
       {/* ---------- Reiter 2: SBOMs je Version ---------- */}
       {tab === 'sboms' && <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
+          <span className="muted" style={{ flex: 1 }}>{t('Ein Produkt kann mehrere SBOMs haben — etwa je Artefakt (Backend, Firmware). Alle laufen in ein Komponenteninventar.')}</span>
+          <button className="ab sm" onClick={() => fileRef.current?.click()} disabled={!version}>{t('SBOM importieren')}</button>
+        </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
             <thead><tr><th style={{ width: '30%' }}>{t('Datei')}</th><th>{t('Format')}</th><th>{t('Tiefe')}</th><th>{t('Erstellt')}</th><th>{t('Importiert')}</th><th>{t('Komponenten')}</th></tr></thead>
@@ -1071,7 +1115,7 @@ export default function SbomTool() {
                 </tr>
               ))}
               {!sboms.length && <tr><td colSpan={6} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
-                {t('Noch keine SBOM für')} {product?.name} {version?.version} {t('— oben „SBOM importieren" (CycloneDX- oder SPDX-JSON).')}</td></tr>}
+                {t('Noch keine SBOM für')} {product?.name} {version?.version}</td></tr>}
             </tbody>
           </table>
         </div>

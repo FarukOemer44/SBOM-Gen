@@ -22,9 +22,10 @@ Open <http://localhost:5200>. The database starts empty — that is intentional.
 ### First run, end to end (5 minutes)
 
 1. **Create a product.** Click *Neues Produkt anlegen*, e.g. `ACME IoT Gateway`, version `2.4.0`.
-2. **Import the SBOM.** Click *SBOM importieren* and pick
-   [`sboms/acme-iot-gateway.cdx.json`](sboms/acme-iot-gateway.cdx.json) from this repository.
-   → 732 components land in the inventory, the original file is archived.
+2. **Import the SBOM.** Either attach it right in the product dialog, or open the *SBOMs* tab and
+   import [`sboms/acme-iot-gateway.cdx.json`](sboms/acme-iot-gateway.cdx.json) from this repository.
+   → 732 components land in the inventory, the original file is archived. A version can hold
+   several SBOMs — one per artifact, say backend and firmware — and they all feed one inventory.
 3. **Run the scan.** Click *CVE-Abgleich (OSV)*. Takes about 15–20 seconds.
    → 337 findings, roughly 59 critical / 130 high / 123 medium / 25 low. 319 of them arrive with
    a CVE number and a concrete fixed version, all 337 with links to the advisory, the NVD entry
