@@ -26,6 +26,7 @@ db.exec(`
     kind TEXT NOT NULL DEFAULT 'software_oss',      -- hardware | software_eigen | software_oss | software_zukauf
     name TEXT NOT NULL, version TEXT DEFAULT '', supplier TEXT DEFAULT '',
     purl TEXT DEFAULT '', cpe TEXT DEFAULT '', license TEXT DEFAULT '',
+    is_direct INTEGER DEFAULT 0,                    -- direkte Abhaengigkeit laut SBOM-Graph
     is_core_function INTEGER DEFAULT 0,             -- Art. 13 Abs. 8 (Unterstützungszeitraum-Begründung)
     dd_status TEXT DEFAULT 'offen',                 -- Sorgfaltspflicht Art. 13 Abs. 5: offen | geprueft
     dd_note TEXT DEFAULT '',                        -- due_diligence_record (Baseline-Verweis genügt)
@@ -72,6 +73,13 @@ const QUERY_CHUNK = 400      // purls je querybatch-Request
 const DETAIL_PARALLEL = 10   // parallele Detail-Abfragen an /v1/vulns
 
 // Spalten, die erst spaeter dazukamen — bestehende Datenbanken nachziehen
+// Komponenten: direkte Abhaengigkeit? Nur fuer diese (und Hardware/Zukauf) ist die
+// Sorgfaltspflicht praktikabel — transitive Pakete waehlt niemand aus.
+{
+  const has = db.prepare('PRAGMA table_info(components)').all().some(c => c.name === 'is_direct')
+  if (!has) db.exec('ALTER TABLE components ADD COLUMN is_direct INTEGER DEFAULT 0')
+}
+
 for (const [col, ddl] of [
   ['aliases', "TEXT DEFAULT ''"],          // CVE-Nummern zur OSV-/GHSA-ID
   ['cwe_ids', "TEXT DEFAULT ''"],          // Schwachstellenklassen
@@ -134,10 +142,10 @@ app.post('/api/products/:id/versions', (req, res) => {
     const all = db.prepare('SELECT * FROM components WHERE version_id = ?').all(copyFrom)
     const comps = mode === 'new_sbom' ? all.filter(c => c.kind === 'hardware') : all
     const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-      is_core_function, dd_status, dd_note, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      is_direct, is_core_function, dd_status, dd_note, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     for (const c of comps) {
       ins.run(uid(), vid, c.kind, c.name, c.version, c.supplier, c.purl, c.cpe, c.license,
-        c.is_core_function, c.dd_status, c.dd_note, c.source, now())
+        c.is_direct, c.is_core_function, c.dd_status, c.dd_note, c.source, now())
       copied++
     }
     if (mode === 'unchanged') {
@@ -182,8 +190,8 @@ app.post('/api/versions/:id/components', (req, res) => {
   const c = req.body
   if (!c.name?.trim()) return res.status(400).json({ error: 'Name fehlt' })
   db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-    is_core_function, dd_status, dd_note, source, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manuell', ?)`)
+    is_direct, is_core_function, dd_status, dd_note, source, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'manuell', ?)`)
     .run(uid(), req.params.id, c.kind || 'software_oss', c.name.trim(), c.version || '', c.supplier || '',
       c.purl || '', c.cpe || '', c.license || '', c.is_core_function ? 1 : 0,
       c.dd_status || 'offen', c.dd_note || '', now())
@@ -223,14 +231,16 @@ app.post('/api/versions/:id/sboms', (req, res) => {
   // Abgleich über purl, sonst Name+Version. Typ/Sorgfalt bestehender Einträge bleiben erhalten.
   const existing = db.prepare('SELECT * FROM components WHERE version_id = ?').all(vid)
   const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-    is_core_function, dd_status, dd_note, source, created_at)
-    VALUES (?, ?, 'software_oss', ?, ?, ?, ?, '', ?, 0, 'offen', '', 'sbom_import', ?)`)
-  const upd = db.prepare('UPDATE components SET version=?, supplier=?, license=?, source=? WHERE id=?')
+    is_direct, is_core_function, dd_status, dd_note, source, created_at)
+    VALUES (?, ?, 'software_oss', ?, ?, ?, ?, '', ?, ?, 0, 'offen', '', 'sbom_import', ?)`)
+  const upd = db.prepare('UPDATE components SET version=?, supplier=?, license=?, is_direct=?, source=? WHERE id=?')
   let added = 0, updated = 0
   for (const c of components) {
+    const direct = c.is_direct ? 1 : 0
     const match = existing.find(e => (c.purl && e.purl === c.purl) || (!c.purl && e.name === c.name))
-    if (match) { upd.run(c.version || match.version, c.supplier || match.supplier, c.license || match.license, 'sbom_import', match.id); updated++ }
-    else { ins.run(uid(), vid, c.name, c.version || '', c.supplier || '', c.purl || '', c.license || '', now()); added++ }
+    if (match) { upd.run(c.version || match.version, c.supplier || match.supplier, c.license || match.license,
+                         direct || match.is_direct, 'sbom_import', match.id); updated++ }
+    else { ins.run(uid(), vid, c.name, c.version || '', c.supplier || '', c.purl || '', c.license || '', direct, now()); added++ }
   }
   audit('sbom.import', (fileName || '') + ' · +' + added + ' / ~' + updated)
   res.json({ ...versionData(vid), imported: { added, updated } })
@@ -429,6 +439,20 @@ app.patch('/api/findings/:id', (req, res) => {
       now(), req.params.id)
   audit('finding.update', cur.vuln_id)
   res.json(versionData(cur.version_id))
+})
+
+// Massen-Bewertung: nur die Betroffenheit (VEX). Entscheidung, Verantwortlicher und
+// Fristen bleiben bewusst Einzelfall — betroffen ist erst der Anfang der Arbeit.
+app.patch('/api/versions/:id/findings/bulk', (req, res) => {
+  const { ids, vex_status, vex_justification } = req.body
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Keine Funde ausgewaehlt' })
+  if (!['under_investigation', 'affected', 'not_affected', 'fixed'].includes(vex_status))
+    return res.status(400).json({ error: 'Unbekannter VEX-Status' })
+  const upd = db.prepare('UPDATE findings SET vex_status=?, vex_justification=?, updated_at=? WHERE id=? AND version_id=?')
+  const run = db.transaction(list => { for (const id of list) upd.run(vex_status, vex_justification || '', now(), id, req.params.id) })
+  run(ids)
+  audit('finding.bulk', ids.length + ' Funde -> ' + vex_status)
+  res.json(versionData(req.params.id))
 })
 
 app.get('/api/audit', (_req, res) =>

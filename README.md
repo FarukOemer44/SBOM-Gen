@@ -48,6 +48,29 @@ Open <http://localhost:5200>. The database starts empty — that is intentional.
 
 Separate processes if you prefer: `npm run server` and `npm run dev`.
 
+### Triage at scale
+
+238 findings is a lot to work through one by one, so two things take the weight off.
+
+**Filtering** lives behind the *Filter* button next to the tabs, grouped by dimension (type,
+origin, severity, due diligence for components; severity, affectedness, remediation for findings).
+Counts sit on every option and empty ones are greyed out, so you can see where the work is before
+you click.
+
+**Bulk assessment** works on affectedness only. Tick the findings, write one justification, and set
+them all to affected / not affected / fixed at once. That is deliberate: most findings from an SBOM
+scan end up "not affected", and clearing them is what makes the genuinely affected ones visible.
+Everything after that — decision, owner, deadlines, evidence — stays per finding, because being
+affected is where the actual work starts, not where it ends.
+
+### Due diligence applies to what you choose
+
+The due diligence record is scoped to the components a manufacturer actually selects: hardware,
+purchased software, and **direct dependencies**. Directness is read from the SBOM's own dependency
+graph on import (CycloneDX `dependencies`, SPDX `relationships`), so in the bundled example it is
+88 components rather than 740. Nobody vets 650 transitive packages one at a time, and Art. 13(5)
+does not ask them to — it is about the components you decide to integrate.
+
 ### What the interface does not do
 
 Products are not created here beyond the very first one — in the full product they come from the

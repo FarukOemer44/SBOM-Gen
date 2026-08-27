@@ -139,11 +139,23 @@ function NewVersionModal({ onClose }) {
         const jx = JSON.parse(text)
         const raw = jx.components || jx.packages || []
         if (!raw.length) throw new Error(t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.'))
+        // Direkte Abhaengigkeiten aus dem Abhaengigkeitsgraph (CycloneDX) bzw. den
+        // SPDX-Relationships bestimmen — nur fuer sie ist die Sorgfaltspruefung sinnvoll.
+        const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
+        const directRefs = new Set(
+          (jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || [])
+        )
+        const spdxDirect = new Set(
+          (jx.relationships || []).filter(r => r.relationshipType === 'DEPENDS_ON'
+            && r.spdxElementId === (jx.documentDescribes?.[0] || 'SPDXRef-DOCUMENT'))
+            .map(r => r.relatedSpdxElement)
+        )
         const list = raw.map(c => ({
           name: c.name || '?', version: c.version || c.versionInfo || '',
           purl: c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || '',
           supplier: c.supplier?.name || c.publisher || (typeof c.supplier === 'string' ? c.supplier.replace(/^Organization: /, '') : '') || '',
           license: (c.licenses && (c.licenses[0]?.license?.id || c.licenses[0]?.expression)) || c.licenseConcluded || '',
+          is_direct: directRefs.has(c['bom-ref']) || spdxDirect.has(c.SPDXID) ? 1 : 0,
         }))
         const fmt = jx.bomFormat ? 'CycloneDX ' + (jx.specVersion || '') : jx.spdxVersion ? 'SPDX ' + jx.spdxVersion : 'SBOM'
         await call('POST', '/api/versions/' + res.versionId + '/sboms', {
@@ -575,6 +587,125 @@ function DiffTab({ versionLabel }) {
   )
 }
 
+// ---------- Filter als eigener Bereich ----------
+function FilterRow({ label, children }) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#808E9C', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{children}</div>
+    </div>
+  )
+}
+
+function Chip({ active, count, disabled, dot, onClick, children }) {
+  return (
+    <span className={'sevchip' + (active ? ' active' : '') + (disabled ? ' off' : '')}
+      onClick={disabled ? undefined : onClick}>
+      {dot && <span className="dot" style={{ background: dot }} />}
+      {children}{count !== undefined && <b>{count}</b>}
+    </span>
+  )
+}
+
+function FilterDrawer({ tab, f, set, counts, onClose }) {
+  const t = useT()
+  const reset = () => set({ kind: null, compSev: null, compDd: false, compDirect: null, sev: null, vex: null, fix: null })
+  const activeCount = Object.values(f).filter(v => v !== null && v !== false).length
+  return (
+    <Drawer onClose={onClose}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span className="dtitle" style={{ flex: 1 }}>{t('Filter')}</span>
+        {activeCount > 0 && <span className="link" style={{ fontSize: 13 }} onClick={reset}>{t('Zurücksetzen')}</span>}
+        <CloseX onClick={onClose} />
+      </div>
+
+      {tab === 'komponenten' && <>
+        <FilterRow label={t('Typ')}>
+          <Chip active={!f.kind} onClick={() => set({ kind: null })}>{t('Alle')} </Chip>
+          {KINDS.map(([k, label]) => (
+            <Chip key={k} active={f.kind === k} count={counts.kind[k]} disabled={!counts.kind[k]}
+              onClick={() => set({ kind: f.kind === k ? null : k })}>{t(label)} </Chip>
+          ))}
+        </FilterRow>
+        <FilterRow label={t('Herkunft')}>
+          <Chip active={!f.compDirect} onClick={() => set({ compDirect: null })}>{t('Alle')} </Chip>
+          <Chip active={f.compDirect === 'direct'} count={counts.direct} disabled={!counts.direct}
+            onClick={() => set({ compDirect: f.compDirect === 'direct' ? null : 'direct' })}>{t('Direkt eingebunden')} </Chip>
+          <Chip active={f.compDirect === 'transitive'} count={counts.transitive} disabled={!counts.transitive}
+            onClick={() => set({ compDirect: f.compDirect === 'transitive' ? null : 'transitive' })}>{t('Transitiv')} </Chip>
+        </FilterRow>
+        <FilterRow label={t('Schwachstellen an der Komponente')}>
+          <Chip active={!f.compSev} onClick={() => set({ compSev: null })}>{t('Alle')} </Chip>
+          {SEVS.filter(([k]) => k !== '—').map(([k, label, col]) => (
+            <Chip key={k} active={f.compSev === k} count={counts.compSev[k]} disabled={!counts.compSev[k]} dot={col}
+              onClick={() => set({ compSev: f.compSev === k ? null : k })}>{t(label)} </Chip>
+          ))}
+          <Chip active={f.compSev === 'none'} count={counts.compSev.none}
+            onClick={() => set({ compSev: f.compSev === 'none' ? null : 'none' })}>{t('Ohne Funde')} </Chip>
+        </FilterRow>
+        <FilterRow label={t('Sorgfalt')}>
+          <Chip active={!f.compDd} onClick={() => set({ compDd: false })}>{t('Alle')} </Chip>
+          <Chip active={f.compDd} count={counts.ddOpen} disabled={!counts.ddOpen}
+            onClick={() => set({ compDd: !f.compDd })}>{t('Sorgfalt offen')} </Chip>
+        </FilterRow>
+      </>}
+
+      {tab === 'funde' && <>
+        {selected.size > 0 && (
+          <BulkBar count={selected.size} busy={bulkBusy} onClear={() => setSelected(new Set())}
+            onApply={async (vex, just) => {
+              setBulkBusy(true)
+              try {
+                await call('PATCH', '/api/versions/' + sel.vid + '/findings/bulk',
+                  { ids: [...selected], vex_status: vex, vex_justification: just })
+                setSelected(new Set())
+              } finally { setBulkBusy(false) }
+            }} />
+        )}
+        <FilterRow label={t('Schwere')}>
+          <Chip active={!f.sev} onClick={() => set({ sev: null })}>{t('Alle')} </Chip>
+          {SEVS.map(([k, label, col]) => (
+            <Chip key={k} active={f.sev === k} count={counts.sev[k]} disabled={!counts.sev[k]} dot={col}
+              onClick={() => set({ sev: f.sev === k ? null : k })}>{t(label)} </Chip>
+          ))}
+        </FilterRow>
+        <FilterRow label={t('Betroffenheit')}>
+          <Chip active={!f.vex} onClick={() => set({ vex: null })}>{t('Alle')} </Chip>
+          {VEX_STATI.map(([v, label]) => (
+            <Chip key={v} active={f.vex === v} count={counts.vex[v]} disabled={!counts.vex[v]}
+              onClick={() => set({ vex: f.vex === v ? null : v })}>{t(label)} </Chip>
+          ))}
+        </FilterRow>
+        <FilterRow label={t('Behebung')}>
+          <Chip active={!f.fix} onClick={() => set({ fix: null })}>{t('Alle')} </Chip>
+          <Chip active={f.fix === 'has'} count={counts.fixHas} disabled={!counts.fixHas}
+            onClick={() => set({ fix: f.fix === 'has' ? null : 'has' })}>{t('Fix verfügbar')} </Chip>
+          <Chip active={f.fix === 'none'} count={counts.fixNone} disabled={!counts.fixNone}
+            onClick={() => set({ fix: f.fix === 'none' ? null : 'none' })}>{t('Kein Fix')} </Chip>
+        </FilterRow>
+      </>}
+    </Drawer>
+  )
+}
+
+// ---------- Massen-Bewertung der Betroffenheit ----------
+function BulkBar({ count, onApply, onClear, busy }) {
+  const t = useT()
+  const [just, setJust] = useState('')
+  return (
+    <div className="bulkbar">
+      <b style={{ color: '#0B1928' }}>{count}</b>
+      <span>{t('Funde ausgewählt')}</span>
+      <input className="field" style={{ flex: 1, minWidth: 180, height: 32 }} value={just}
+        onChange={e => setJust(e.target.value)} placeholder={t('Begründung (gilt für alle ausgewählten)')} />
+      {VEX_STATI.filter(([v]) => v !== 'under_investigation').map(([v, label]) => (
+        <button key={v} className="hb sm" disabled={busy} onClick={() => onApply(v, just)}>{t(label)}</button>
+      ))}
+      <span className="link" style={{ fontSize: 12.5 }} onClick={onClear}>{t('Auswahl aufheben')}</span>
+    </div>
+  )
+}
+
 // ---------- Scan-Historie ----------
 function ScanHistoryModal({ scans, onClose }) {
   const t = useT()
@@ -663,11 +794,12 @@ export default function SbomTool() {
   const { products, product, version, sel, setSel, data, call, busy, notice, setNotice, reloadProducts } = useStore()
   const [q, setQ] = useState('')
   const [tab, setTab] = useState('komponenten')
-  const [kindFilter, setKindFilter] = useState(null)
-  const [compSev, setCompSev] = useState(null)      // Schwere der Funde an der Komponente, 'none' = ohne Funde
-  const [compDd, setCompDd] = useState(false)       // nur offener Sorgfaltsnachweis
-  const [sevFilter, setSevFilter] = useState(null)
-  const [vexFilter, setVexFilter] = useState(null)
+  const EMPTY_FILTER = { kind: null, compSev: null, compDd: false, compDirect: null, sev: null, vex: null, fix: null }
+  const [filter, setFilterRaw] = useState(EMPTY_FILTER)
+  const setFilter = patchObj => setFilterRaw(f => ({ ...f, ...patchObj }))
+  const activeFilters = Object.values(filter).filter(v => v !== null && v !== false).length
+  const [selected, setSelected] = useState(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [modal, setModal] = useState(null)        // 'produkt' | 'version'
   const [compOpen, setCompOpen] = useState(null)  // component | 'neu'
   const [findOpen, setFindOpen] = useState(null)
@@ -687,11 +819,23 @@ export default function SbomTool() {
       try {
         const jx = JSON.parse(reader.result)
         const raw = jx.components || jx.packages || []
+        // Direkte Abhaengigkeiten aus dem Abhaengigkeitsgraph (CycloneDX) bzw. den
+        // SPDX-Relationships bestimmen — nur fuer sie ist die Sorgfaltspruefung sinnvoll.
+        const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
+        const directRefs = new Set(
+          (jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || [])
+        )
+        const spdxDirect = new Set(
+          (jx.relationships || []).filter(r => r.relationshipType === 'DEPENDS_ON'
+            && r.spdxElementId === (jx.documentDescribes?.[0] || 'SPDXRef-DOCUMENT'))
+            .map(r => r.relatedSpdxElement)
+        )
         const list = raw.map(c => ({
           name: c.name || '?', version: c.version || c.versionInfo || '',
           purl: c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || '',
           supplier: c.supplier?.name || c.publisher || (typeof c.supplier === 'string' ? c.supplier.replace(/^Organization: /, '') : '') || '',
           license: (c.licenses && (c.licenses[0]?.license?.id || c.licenses[0]?.expression)) || c.licenseConcluded || '',
+          is_direct: directRefs.has(c['bom-ref']) || spdxDirect.has(c.SPDXID) ? 1 : 0,
         }))
         if (!list.length) { setNotice({ err: true, msg: t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.') }); return }
         const fmt = jx.bomFormat ? 'CycloneDX ' + (jx.specVersion || '') : jx.spdxVersion ? 'SPDX ' + jx.spdxVersion : 'SBOM'
@@ -734,20 +878,42 @@ export default function SbomTool() {
   const sevCounts = { KRITISCH: 0, HOCH: 0, MITTEL: 0, NIEDRIG: 0, '—': 0 }
   findings.forEach(f => { sevCounts[f.severity in sevCounts ? f.severity : '—']++ })
   const hw = components.filter(c => c.kind === 'hardware').length
-  const geprueft = components.filter(c => c.kind === 'software_eigen' || c.dd_status === 'geprueft').length
+  const ddPool = components.filter(c => c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct)
+  const geprueft = ddPool.filter(c => c.dd_status === 'geprueft').length
   const triaged = findings.filter(f => f.vex_status !== 'under_investigation').length
 
   const compFindings = c => findingsByComp[c.id] || []
-  const ddOpen = c => c.kind !== 'software_eigen' && c.dd_status !== 'geprueft'
+  // Sorgfaltspflicht betrifft die Komponenten, die man auswaehlt: Hardware, Zukauf
+  // und direkte Abhaengigkeiten. Transitive Pakete waehlt niemand aus.
+  const ddRelevant = c => c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct
+  const ddOpen = c => ddRelevant(c) && c.dd_status !== 'geprueft'
+  const hasFix = f => !!f.fixed_versions && !f.fixed_versions.startsWith('kein Fix')
+  const filterCounts = {
+    kind: Object.fromEntries(KINDS.map(([k]) => [k, components.filter(c => c.kind === k).length])),
+    direct: components.filter(c => !!c.is_direct).length,
+    transitive: components.filter(c => !c.is_direct).length,
+    compSev: {
+      ...Object.fromEntries(SEVS.map(([k]) => [k, components.filter(c => (findingsByComp[c.id] || [])
+        .some(f => (f.severity in sevCounts ? f.severity : '—') === k)).length])),
+      none: components.filter(c => !(findingsByComp[c.id] || []).length).length,
+    },
+    ddOpen: components.filter(c => (c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct) && c.dd_status !== 'geprueft').length,
+    sev: sevCounts,
+    vex: Object.fromEntries(VEX_STATI.map(([v]) => [v, findings.filter(f => f.vex_status === v).length])),
+    fixHas: findings.filter(f => !!f.fixed_versions && !f.fixed_versions.startsWith('kein Fix')).length,
+    fixNone: findings.filter(f => !f.fixed_versions || f.fixed_versions.startsWith('kein Fix')).length,
+  }
   const compRows = components
-    .filter(c => !kindFilter || c.kind === kindFilter)
-    .filter(c => !compSev || (compSev === 'none' ? compFindings(c).length === 0
-      : compFindings(c).some(f => (f.severity in sevCounts ? f.severity : '—') === compSev)))
-    .filter(c => !compDd || ddOpen(c))
+    .filter(c => !filter.kind || c.kind === filter.kind)
+    .filter(c => !filter.compDirect || (filter.compDirect === 'direct' ? !!c.is_direct : !c.is_direct))
+    .filter(c => !filter.compSev || (filter.compSev === 'none' ? compFindings(c).length === 0
+      : compFindings(c).some(f => (f.severity in sevCounts ? f.severity : '—') === filter.compSev)))
+    .filter(c => !filter.compDd || ddOpen(c))
     .filter(c => !q || (c.name + ' ' + c.purl + ' ' + c.supplier).toLowerCase().includes(q.toLowerCase()))
   const findRows = findings
-    .filter(f => !sevFilter || (f.severity in sevCounts ? f.severity : '—') === sevFilter)
-    .filter(f => !vexFilter || f.vex_status === vexFilter)
+    .filter(f => !filter.sev || (f.severity in sevCounts ? f.severity : '—') === filter.sev)
+    .filter(f => !filter.vex || f.vex_status === filter.vex)
+    .filter(f => !filter.fix || (filter.fix === 'has' ? hasFix(f) : !hasFix(f)))
     .filter(f => !q || (f.vuln_id + ' ' + (f.component_name || '') + ' ' + f.summary).toLowerCase().includes(q.toLowerCase()))
 
   // ---------- Leerer Zustand ----------
@@ -802,8 +968,8 @@ export default function SbomTool() {
         </div>
         <div className="kpi">
           <div className="l">{t('Sorgfalt')}</div>
-          <div className="v">{geprueft}<span style={{ fontSize: 13, fontWeight: 500, color: '#8B95A3' }}> / {components.length}</span></div>
-          <div className="progress" style={{ marginTop: 7 }}><div style={{ width: (components.length ? geprueft / components.length * 100 : 0) + '%', background: '#27AE60' }} /></div>
+          <div className="v">{geprueft}<span style={{ fontSize: 13, fontWeight: 500, color: '#8B95A3' }}> / {ddPool.length}</span></div>
+          <div className="progress" style={{ marginTop: 7 }}><div style={{ width: (ddPool.length ? geprueft / ddPool.length * 100 : 0) + '%', background: '#27AE60' }} /></div>
           <div className="s">{t('Drittkomponenten geprüft bzw. Eigenentwicklung')}</div>
         </div>
         <div className="kpi">
@@ -828,47 +994,23 @@ export default function SbomTool() {
       <div className="tabrow">
         <span className={'tabpill' + (tab === 'komponenten' ? ' active' : '')} onClick={() => setTab('komponenten')}>{t('Komponenten')} ({compRows.length !== components.length ? compRows.length + ' / ' : ''}{components.length})</span>
         <span className={'tabpill' + (tab === 'sboms' ? ' active' : '')} onClick={() => setTab('sboms')}>{t('SBOMs')} ({sboms.length})</span>
-        <span className={'tabpill' + (tab === 'funde' ? ' active' : '')} onClick={() => setTab('funde')}>{t('Funde')} ({findings.length})</span>
+        <span className={'tabpill' + (tab === 'funde' ? ' active' : '')} onClick={() => setTab('funde')}>{t('Funde')} ({findRows.length !== findings.length ? findRows.length + ' / ' : ''}{findings.length})</span>
         <span className={'tabpill' + (tab === 'aenderungen' ? ' active' : '')} onClick={() => setTab('aenderungen')}>{t('Änderungen')}</span>
+        <span style={{ flex: 1 }} />
+        {(tab === 'komponenten' || tab === 'funde') && (
+          <button className={'hb sm' + (activeFilters ? ' on' : '')} onClick={() => setModal('filter')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
+            {t('Filter')}{activeFilters ? ' (' + activeFilters + ')' : ''}
+          </button>
+        )}
         <span style={{ flex: 1 }} />
       </div>
 
       {/* ---------- Reiter 1: Komponenten (Inventar = Obermenge, Abschnitt 1.6) ---------- */}
       {tab === 'komponenten' && <>
-        <div style={{ display: 'flex', gap: 6, padding: '10px 16px 0', flexWrap: 'wrap' }}>
-          <span className={'sevchip' + (kindFilter === null ? ' active' : '')} onClick={() => setKindFilter(null)}>{t('Alle')}</span>
-          {KINDS.map(([k, label]) => (
-            <span key={k} className={'sevchip' + (kindFilter === k ? ' active' : '')} onClick={() => setKindFilter(kindFilter === k ? null : k)}>
-              {t(label)} <b>{components.filter(c => c.kind === k).length}</b>
-            </span>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 6, padding: '8px 16px 0', flexWrap: 'wrap', alignItems: 'center' }}>
-          {SEVS.filter(([k]) => k !== '—').map(([k, label, col]) => {
-            const n = components.filter(c => compFindings(c).some(f => (f.severity in sevCounts ? f.severity : '—') === k)).length
-            return (
-              <span key={k} className={'sevchip' + (compSev === k ? ' active' : '')}
-                onClick={() => setCompSev(compSev === k ? null : k)}>
-                <span className="dot" style={{ background: col }} />{t(label)} <b>{n}</b>
-              </span>
-            )
-          })}
-          <span className={'sevchip' + (compSev === 'none' ? ' active' : '')}
-            onClick={() => setCompSev(compSev === 'none' ? null : 'none')}>
-            {t('Ohne Funde')} <b>{components.filter(c => compFindings(c).length === 0).length}</b>
-          </span>
-          <span style={{ width: 10 }} />
-          <span className={'sevchip' + (compDd ? ' active' : '')} onClick={() => setCompDd(v => !v)}>
-            {t('Sorgfalt offen')} <b>{components.filter(ddOpen).length}</b>
-          </span>
-          {(kindFilter || compSev || compDd) && (
-            <span className="link" style={{ fontSize: 12.5, marginLeft: 4 }}
-              onClick={() => { setKindFilter(null); setCompSev(null); setCompDd(false) }}>{t('Filter zurücksetzen')}</span>
-          )}
-        </div>
         <div className="tblwrap sc">
           <table className="tbl">
-            <thead><tr><th style={{ width: '28%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Lieferant')}</th><th>{t('SBOM')}</th><th>{t('Schwachstellen')}</th><th>{t('Sorgfalt')}</th></tr></thead>
+            <thead><tr><th style={{ width: '28%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Schwachstellen')}</th><th>{t('Sorgfalt')}</th></tr></thead>
             <tbody>
               {compRows.map(c => {
                 const fs = findingsByComp[c.id] || []
@@ -883,10 +1025,9 @@ export default function SbomTool() {
                         {c.purl || c.cpe || (c.kind === 'hardware' ? 'Lieferantenweg — keine purl' : 'ohne purl — nicht OSV-abgleichbar')}
                       </span>
                     </td>
-                    <td><Pill kind={kindColor}>{t(kindLabel)}</Pill>{!!c.is_core_function && <span className="muted" style={{ marginLeft: 6 }}>{t('Kernfunktion')}</span>}</td>
+                    <td><Pill kind={kindColor}>{t(kindLabel)}</Pill>{!!c.is_direct && <span className="muted" style={{ marginLeft: 6 }}>{t('direkt')}</span>}{!!c.is_core_function && <span className="muted" style={{ marginLeft: 6 }}>{t('Kernfunktion')}</span>}</td>
                     <td>{c.version || '—'}</td>
-                    <td>{c.supplier || '—'}</td>
-                    <td>{c.kind === 'hardware' ? <Pill kind="neutral">{t('Inventar')}</Pill> : <Pill kind="blue">{t('SBOM')}</Pill>}</td>
+
                     <td>
                       {fs.length === 0
                         ? <span className="muted">{c.kind === 'hardware' ? 'über Advisories' : 'keine bekannt'}</span>
@@ -895,14 +1036,14 @@ export default function SbomTool() {
                           </span>}
                     </td>
                     <td>
-                      {c.kind === 'software_eigen'
+                      {!ddRelevant(c)
                         ? <span className="muted">{t('entfällt')}</span>
                         : c.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
                     </td>
                   </tr>
                 )
               })}
-              {!compRows.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
+              {!compRows.length && <tr><td colSpan={5} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
                 {components.length ? 'Keine Komponenten für diesen Filter.' : 'Noch keine Komponenten — SBOM importieren oder Hardware/Software manuell anlegen.'}</td></tr>}
             </tbody>
           </table>
@@ -935,26 +1076,27 @@ export default function SbomTool() {
 
       {/* ---------- Reiter 3: Funde (Schwachstellen auf dem Inventar) ---------- */}
       {tab === 'funde' && <>
-        <div style={{ display: 'flex', gap: 6, padding: '10px 16px 0', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className={'sevchip' + (sevFilter === null ? ' active' : '')} onClick={() => setSevFilter(null)}>{t('Alle')}</span>
-          {SEVS.map(([k, label, c]) => (
-            <span key={k} className={'sevchip' + (sevFilter === k ? ' active' : '')} onClick={() => setSevFilter(sevFilter === k ? null : k)}>
-              <span className="dot" style={{ background: c }} />{t(label)} <b>{sevCounts[k]}</b>
-            </span>
-          ))}
-          <span style={{ width: 14 }} />
-          {VEX_STATI.map(([v, label]) => (
-            <span key={v} className={'sevchip' + (vexFilter === v ? ' active' : '')} onClick={() => setVexFilter(vexFilter === v ? null : v)}>
-              {t(label)} <b>{findings.filter(f => f.vex_status === v).length}</b>
-            </span>
-          ))}
-        </div>
+        {selected.size > 0 && (
+          <BulkBar count={selected.size} busy={bulkBusy} onClear={() => setSelected(new Set())}
+            onApply={async (vex, just) => {
+              setBulkBusy(true)
+              try {
+                await call('PATCH', '/api/versions/' + sel.vid + '/findings/bulk',
+                  { ids: [...selected], vex_status: vex, vex_justification: just })
+                setSelected(new Set())
+              } finally { setBulkBusy(false) }
+            }} />
+        )}
         <div className="tblwrap sc">
           <table className="tbl">
-            <thead><tr><th>{t('Schwere')}</th><th style={{ width: '28%' }}>{t('Schwachstelle')}</th><th>{t('Komponente')}</th><th>{t('Behebung')}</th><th>{t('Betroffenheit')}</th><th>{t('Entscheidung')}</th><th>{t('Verantwortlich')}</th></tr></thead>
+            <thead><tr><th className="selcell"><input type="checkbox" className="selbox" checked={findRows.length > 0 && selected.size === findRows.length} onChange={e => setSelected(e.target.checked ? new Set(findRows.map(x => x.id)) : new Set())} /></th><th>{t('Schwere')}</th><th style={{ width: '28%' }}>{t('Schwachstelle')}</th><th>{t('Komponente')}</th><th>{t('Behebung')}</th><th>{t('Betroffenheit')}</th><th>{t('Entscheidung')}</th><th>{t('Verantwortlich')}</th></tr></thead>
             <tbody>
               {findRows.map(f => (
                 <tr key={f.id} className="row" onClick={() => setFindOpen(f)}>
+                  <td className="selcell" onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" className="selbox" checked={selected.has(f.id)}
+                      onChange={e => setSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(f.id) : n.delete(f.id); return n })} />
+                  </td>
                   <td><SevPill f={f} />{!!f.actively_exploited && <div style={{ marginTop: 4 }}><Pill kind="red">{t('Aktiv ausgenutzt')}</Pill></div>}</td>
                   <td>
                     <span className="link">{(f.aliases || '').split(', ').find(a => a.startsWith('CVE-')) || f.vuln_id}</span>
@@ -977,7 +1119,7 @@ export default function SbomTool() {
                   <td>{f.owner || <span className="muted">—</span>}</td>
                 </tr>
               ))}
-              {!findRows.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
+              {!findRows.length && <tr><td colSpan={8} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
                 {findings.length ? 'Keine Funde für diesen Filter.' : 'Noch keine Funde — oben „CVE-Abgleich (OSV)" starten (Software mit purl nötig).'}</td></tr>}
             </tbody>
           </table>
@@ -989,6 +1131,7 @@ export default function SbomTool() {
 
       {modal === 'produkt' && <NewProductModal onClose={() => setModal(null)} />}
       {modal === 'version' && <NewVersionModal onClose={() => setModal(null)} />}
+      {modal === 'filter' && <FilterDrawer tab={tab} f={filter} set={setFilter} counts={filterCounts} onClose={() => setModal(null)} />}
       {modal === 'scans' && <ScanHistoryModal scans={data?.scans || []} onClose={() => setModal(null)} />}
       {compOpen && <ComponentDrawer comp={compOpen === 'neu' ? null : compOpen} onClose={() => setCompOpen(null)} />}
       {findOpen && <FindingDrawer finding={findOpen} onClose={() => setFindOpen(null)} />}
