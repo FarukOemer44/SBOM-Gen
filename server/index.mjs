@@ -464,20 +464,6 @@ app.patch('/api/findings/:id', (req, res) => {
   res.json(versionData(cur.version_id))
 })
 
-// Massen-Bewertung: nur die Betroffenheit (VEX). Entscheidung, Verantwortlicher und
-// Fristen bleiben bewusst Einzelfall — betroffen ist erst der Anfang der Arbeit.
-app.patch('/api/versions/:id/findings/bulk', (req, res) => {
-  const { ids, vex_status, vex_justification } = req.body
-  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Keine Funde ausgewaehlt' })
-  if (!['under_investigation', 'affected', 'not_affected', 'fixed'].includes(vex_status))
-    return res.status(400).json({ error: 'Unbekannter VEX-Status' })
-  const upd = db.prepare('UPDATE findings SET vex_status=?, vex_justification=?, updated_at=? WHERE id=? AND version_id=?')
-  const run = db.transaction(list => { for (const id of list) upd.run(vex_status, vex_justification || '', now(), id, req.params.id) })
-  run(ids)
-  audit('finding.bulk', ids.length + ' Funde -> ' + vex_status)
-  res.json(versionData(req.params.id))
-})
-
 app.get('/api/audit', (_req, res) =>
   res.json(db.prepare('SELECT ts, action, detail FROM audit_log ORDER BY id DESC LIMIT 200').all()))
 

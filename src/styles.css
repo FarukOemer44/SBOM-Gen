@@ -134,12 +134,6 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 .sevchip.off { opacity: .4; cursor: default; }
 .sevchip.off:hover { border-color: #EDEEEF; }
 
-/* Leiste für die Massen-Bewertung */
-.bulkbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 16px 0;
-  padding: 9px 12px; border: 1px solid #1298ff; border-radius: 10px;
-  background: rgba(18,152,255,0.05); font-size: 13px; color: #495057; }
-table.tbl td.selcell, table.tbl th.selcell { width: 34px; padding-right: 0; }
-input.selbox { width: 15px; height: 15px; accent-color: #1298ff; cursor: pointer; }
 .hb.on { border-color: #1298ff; color: #1298ff; background: rgba(18,152,255,0.06); }
 .ownerdot { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
   border-radius: 50%; background: #1298ff; color: #fff; font-size: 9.5px; font-weight: 700; flex: 0 0 auto; }

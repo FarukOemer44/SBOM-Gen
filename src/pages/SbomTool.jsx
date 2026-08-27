@@ -639,17 +639,6 @@ function FilterDrawer({ tab, f, set, counts, onClose }) {
       </>}
 
       {tab === 'funde' && <>
-        {selected.size > 0 && (
-          <BulkBar count={selected.size} busy={bulkBusy} onClear={() => setSelected(new Set())}
-            onApply={async (vex, just) => {
-              setBulkBusy(true)
-              try {
-                await call('PATCH', '/api/versions/' + sel.vid + '/findings/bulk',
-                  { ids: [...selected], vex_status: vex, vex_justification: just })
-                setSelected(new Set())
-              } finally { setBulkBusy(false) }
-            }} />
-        )}
         <FilterRow label={t('Schwere')}>
           <Chip active={!f.sev} onClick={() => set({ sev: null })}>{t('Alle')} </Chip>
           {SEVS.map(([k, label, col]) => (
@@ -673,24 +662,6 @@ function FilterDrawer({ tab, f, set, counts, onClose }) {
         </FilterRow>
       </>}
     </Drawer>
-  )
-}
-
-// ---------- Massen-Bewertung der Betroffenheit ----------
-function BulkBar({ count, onApply, onClear, busy }) {
-  const t = useT()
-  const [just, setJust] = useState('')
-  return (
-    <div className="bulkbar">
-      <b style={{ color: '#0B1928' }}>{count}</b>
-      <span>{t('Funde ausgewählt')}</span>
-      <input className="field" style={{ flex: 1, minWidth: 180, height: 32 }} value={just}
-        onChange={e => setJust(e.target.value)} placeholder={t('Begründung (gilt für alle ausgewählten)')} />
-      {VEX_STATI.filter(([v]) => v !== 'under_investigation').map(([v, label]) => (
-        <button key={v} className="hb sm" disabled={busy} onClick={() => onApply(v, just)}>{t(label)}</button>
-      ))}
-      <span className="link" style={{ fontSize: 12.5 }} onClick={onClear}>{t('Auswahl aufheben')}</span>
-    </div>
   )
 }
 
@@ -833,8 +804,6 @@ export default function SbomTool() {
   const [filter, setFilterRaw] = useState(EMPTY_FILTER)
   const setFilter = patchObj => setFilterRaw(f => ({ ...f, ...patchObj }))
   const activeFilters = Object.values(filter).filter(v => v !== null && v !== false).length
-  const [selected, setSelected] = useState(() => new Set())
-  const [bulkBusy, setBulkBusy] = useState(false)
   const [modal, setModal] = useState(null)        // 'produkt' | 'version'
   const [compOpen, setCompOpen] = useState(null)  // component | 'neu'
   const [findOpen, setFindOpen] = useState(null)
@@ -1110,27 +1079,12 @@ export default function SbomTool() {
 
       {/* ---------- Reiter 3: Funde (Schwachstellen auf dem Inventar) ---------- */}
       {tab === 'funde' && <>
-        {selected.size > 0 && (
-          <BulkBar count={selected.size} busy={bulkBusy} onClear={() => setSelected(new Set())}
-            onApply={async (vex, just) => {
-              setBulkBusy(true)
-              try {
-                await call('PATCH', '/api/versions/' + sel.vid + '/findings/bulk',
-                  { ids: [...selected], vex_status: vex, vex_justification: just })
-                setSelected(new Set())
-              } finally { setBulkBusy(false) }
-            }} />
-        )}
         <div className="tblwrap sc">
           <table className="tbl">
-            <thead><tr><th className="selcell"><input type="checkbox" className="selbox" checked={findRows.length > 0 && selected.size === findRows.length} onChange={e => setSelected(e.target.checked ? new Set(findRows.map(x => x.id)) : new Set())} /></th><th>{t('Schwere')}</th><th style={{ width: '28%' }}>{t('Schwachstelle')}</th><th>{t('Komponente')}</th><th>{t('Behebung')}</th><th>{t('Betroffenheit')}</th><th>{t('Entscheidung')}</th><th>{t('Verantwortlich')}</th></tr></thead>
+            <thead><tr><th>{t('Schwere')}</th><th style={{ width: '28%' }}>{t('Schwachstelle')}</th><th>{t('Komponente')}</th><th>{t('Behebung')}</th><th>{t('Betroffenheit')}</th><th>{t('Entscheidung')}</th><th>{t('Verantwortlich')}</th></tr></thead>
             <tbody>
               {findRows.map(f => (
                 <tr key={f.id} className="row" onClick={() => setFindOpen(f)}>
-                  <td className="selcell" onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" className="selbox" checked={selected.has(f.id)}
-                      onChange={e => setSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(f.id) : n.delete(f.id); return n })} />
-                  </td>
                   <td><SevPill f={f} />{!!f.actively_exploited && <div style={{ marginTop: 4 }}><Pill kind="red">{t('Aktiv ausgenutzt')}</Pill></div>}</td>
                   <td>
                     <span className="link">{(f.aliases || '').split(', ').find(a => a.startsWith('CVE-')) || f.vuln_id}</span>
@@ -1153,7 +1107,7 @@ export default function SbomTool() {
                   <td>{f.owner || (product?.owner ? <span className="muted" title={t('vom Produkt übernommen')}>{product.owner}</span> : <span className="muted">—</span>)}</td>
                 </tr>
               ))}
-              {!findRows.length && <tr><td colSpan={8} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
+              {!findRows.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
                 {findings.length ? 'Keine Funde für diesen Filter.' : 'Noch keine Funde — oben „CVE-Abgleich (OSV)" starten (Software mit purl nötig).'}</td></tr>}
             </tbody>
           </table>
