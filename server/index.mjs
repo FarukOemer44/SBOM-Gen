@@ -184,7 +184,13 @@ const versionData = (vid) => ({
       f.score DESC`).all(vid),
   scans: db.prepare('SELECT * FROM scans WHERE version_id = ? ORDER BY ran_at DESC LIMIT 5').all(vid),
 })
-app.get('/api/versions/:id', (req, res) => res.json(versionData(req.params.id)))
+app.get('/api/versions/:id', (req, res) => {
+  // Wichtig: unbekannte Version als 404 melden. Leere Listen zurueckzugeben wuerde
+  // wie "Version ohne Daten" aussehen — der Client kann das nicht unterscheiden.
+  const v = db.prepare('SELECT id FROM versions WHERE id = ?').get(req.params.id)
+  if (!v) return res.status(404).json({ error: 'Version nicht gefunden' })
+  res.json(versionData(req.params.id))
+})
 
 app.post('/api/versions/:id/components', (req, res) => {
   const c = req.body

@@ -21,13 +21,13 @@ export function StoreProvider({ children }) {
   const [products, setProducts] = useState(null)
   const [dbStatus, setDbStatus] = useState('lädt')
   const [sel, setSelRaw] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sbomtool-sel')) || {} } catch { return {} }
+    try { return JSON.parse(localStorage.getItem('sbomgen-sel')) || {} } catch { return {} }
   })
   const [data, setData] = useState(null)   // Versionsdaten: components, sboms, findings, scans
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)
 
-  const setSel = (s) => { setSelRaw(s); try { localStorage.setItem('sbomtool-sel', JSON.stringify(s)) } catch {} }
+  const setSel = (s) => { setSelRaw(s); try { localStorage.setItem('sbomgen-sel', JSON.stringify(s)) } catch {} }
 
   const loadProducts = () =>
     j('GET', '/api/bootstrap')
@@ -48,7 +48,15 @@ export function StoreProvider({ children }) {
   // Versionsdaten laden, wenn die Auswahl wechselt
   useEffect(() => {
     if (!sel.vid) { setData(null); return }
-    j('GET', '/api/versions/' + sel.vid).then(setData).catch(() => setData(null))
+    j('GET', '/api/versions/' + sel.vid)
+      .then(setData)
+      .catch(() => {
+        // Die gemerkte Version gibt es nicht mehr (etwa nach einem Zuruecksetzen der
+        // Datenbank). Auswahl verwerfen und aus den vorhandenen Produkten neu waehlen.
+        setData(null)
+        setSel({})
+        loadProducts()
+      })
   }, [sel.vid])
 
   if (dbStatus === 'fehler' && !products) return <DbError onRetry={() => { setDbStatus('lädt'); loadProducts() }} />
