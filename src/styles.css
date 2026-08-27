@@ -141,3 +141,5 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 table.tbl td.selcell, table.tbl th.selcell { width: 34px; padding-right: 0; }
 input.selbox { width: 15px; height: 15px; accent-color: #1298ff; cursor: pointer; }
 .hb.on { border-color: #1298ff; color: #1298ff; background: rgba(18,152,255,0.06); }
+.ownerdot { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+  border-radius: 50%; background: #1298ff; color: #fff; font-size: 9.5px; font-weight: 700; flex: 0 0 auto; }

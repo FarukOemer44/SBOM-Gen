@@ -15,6 +15,7 @@ db.pragma('journal_mode = WAL')
 db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, hersteller TEXT DEFAULT '',
+    owner TEXT DEFAULT '',                          -- verantwortlich fuer die Schwachstellenbehandlung
     created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS versions (
@@ -79,6 +80,12 @@ const DETAIL_PARALLEL = 10   // parallele Detail-Abfragen an /v1/vulns
   const has = db.prepare('PRAGMA table_info(components)').all().some(c => c.name === 'is_direct')
   if (!has) db.exec('ALTER TABLE components ADD COLUMN is_direct INTEGER DEFAULT 0')
 }
+// Eine verantwortliche Person je Produkt statt einer je Fund: ENISA 4.13 meint
+// einen Owner fuer Triage und Nachverfolgung, nicht 238 einzelne Zuweisungen.
+{
+  const has = db.prepare('PRAGMA table_info(products)').all().some(c => c.name === 'owner')
+  if (!has) db.exec("ALTER TABLE products ADD COLUMN owner TEXT DEFAULT ''")
+}
 
 for (const [col, ddl] of [
   ['aliases', "TEXT DEFAULT ''"],          // CVE-Nummern zur OSV-/GHSA-ID
@@ -115,6 +122,16 @@ app.post('/api/products', (req, res) => {
   db.prepare('INSERT INTO versions (id, product_id, version, created_at) VALUES (?, ?, ?, ?)').run(vid, pid, version.trim() || '1.0.0', now())
   audit('product.create', name)
   res.json({ productId: pid, versionId: vid })
+})
+
+app.patch('/api/products/:id', (req, res) => {
+  const cur = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id)
+  if (!cur) return res.status(404).json({ error: 'Produkt nicht gefunden' })
+  const { name, hersteller, owner } = req.body
+  db.prepare('UPDATE products SET name=?, hersteller=?, owner=? WHERE id=?')
+    .run(name ?? cur.name, hersteller ?? cur.hersteller, owner ?? cur.owner, req.params.id)
+  audit('product.update', (name ?? cur.name) + (owner !== undefined ? ' · verantwortlich: ' + owner : ''))
+  res.json({ ok: true })
 })
 
 app.delete('/api/products/:id', (req, res) => {

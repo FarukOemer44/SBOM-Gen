@@ -63,6 +63,13 @@ scan end up "not affected", and clearing them is what makes the genuinely affect
 Everything after that — decision, owner, deadlines, evidence — stays per finding, because being
 affected is where the actual work starts, not where it ends.
 
+### One responsible person, not 238 assignments
+
+The owner sits next to the version selector and applies to the whole product. Every finding
+inherits it — the list shows the inherited name in grey — and an individual finding can still be
+assigned to someone else in its drawer. ENISA 4.13 asks for *an* owner for triage and tracking,
+which is one person for a product, not a field to fill in on every row.
+
 ### Due diligence applies to what you choose
 
 The due diligence record is scoped to the components a manufacturer actually selects: hardware,

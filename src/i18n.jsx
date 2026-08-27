@@ -201,6 +201,11 @@ const EN = {
   'Funde ausgewählt': 'findings selected',
   'Begründung (gilt für alle ausgewählten)': 'Justification (applies to all selected)',
   'Auswahl aufheben': 'Clear selection',
+  'Verantwortlich für die Schwachstellenbehandlung': 'Responsible for vulnerability handling',
+  'Gilt für alle Funde dieses Produkts. Einzelne Funde können abweichend zugewiesen werden.':
+    'Applies to every finding of this product. Individual findings can be assigned to someone else.',
+  'vom Produkt übernommen': 'inherited from the product',
+  'Entfernen': 'Remove',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',

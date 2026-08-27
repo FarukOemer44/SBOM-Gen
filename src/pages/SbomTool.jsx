@@ -428,7 +428,8 @@ function FindingDrawer({ finding, onClose }) {
       <div style={{ display: 'flex', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div className="fieldlab">{t('Verantwortlich')}</div>
-          <input className="field" value={f.owner} onChange={e => set('owner', e.target.value, { debounce: true })} placeholder={t('Name')} />
+          <input className="field" value={f.owner} onChange={e => set('owner', e.target.value, { debounce: true })}
+            placeholder={product?.owner || t('Name')} />
         </div>
         <div style={{ flex: 1 }}>
           <div className="fieldlab">{t('Kenntnis am')}</div>
@@ -722,6 +723,53 @@ function ScanHistoryModal({ scans, onClose }) {
   )
 }
 
+// ---------- Verantwortliche Person: einmal am Produkt statt an jedem Fund ----------
+function OwnerPicker() {
+  const t = useT()
+  const { product, call, reloadProducts } = useStore()
+  const [open, setOpen] = useState(false)
+  const [val, setVal] = useState(product?.owner || '')
+  const ref = useRef(null)
+  React.useEffect(() => { setVal(product?.owner || '') }, [product?.owner])
+  React.useEffect(() => {
+    if (!open) return
+    const away = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [open])
+
+  const save = async () => {
+    await call('PATCH', '/api/products/' + product.id, { owner: val.trim() })
+    await reloadProducts()
+    setOpen(false)
+  }
+  const initials = (product?.owner || '').split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button className="hb" style={{ height: 36 }} onClick={() => setOpen(o => !o)} title={t('Verantwortlich für die Schwachstellenbehandlung')}>
+        {product?.owner
+          ? <><span className="ownerdot">{initials}</span><b style={{ fontWeight: 600 }}>{product.owner}</b></>
+          : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" strokeWidth="1.7" /><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>{t('Verantwortlich')}</>}
+        <span style={{ color: '#B6C1CD', fontSize: 11 }}>▾</span>
+      </button>
+      {open && (
+        <div className="popmenu" style={{ padding: 12, minWidth: 260 }}>
+          <div style={{ fontSize: 12, color: '#69778E', lineHeight: 1.5, marginBottom: 8 }}>
+            {t('Gilt für alle Funde dieses Produkts. Einzelne Funde können abweichend zugewiesen werden.')}
+          </div>
+          <input className="field" value={val} autoFocus placeholder={t('Name')}
+            onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+            {product?.owner && <button className="hb sm" style={{ marginRight: 'auto' }} onClick={() => { setVal(''); call('PATCH', '/api/products/' + product.id, { owner: '' }).then(reloadProducts).then(() => setOpen(false)) }}>{t('Entfernen')}</button>}
+            <button className="ab sm" onClick={save}>{t('Übernehmen')}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- Versionsauswahl: umschalten und einzelne Versionen loeschen ----------
 function VersionPicker() {
   const t = useT()
@@ -945,6 +993,7 @@ export default function SbomTool() {
           {products.map(p => <option key={p.id} value={p.id}>{t('Produkt:')} {p.name}</option>)}
         </select>
         <VersionPicker />
+        <OwnerPicker />
         <button className="hb sm" onClick={() => setModal('version')}>{t('+ Version')}</button>
         <span style={{ flex: 1 }} />
         {scanBanner && <Pill kind="green">{t('Abgleich abgeschlossen — SBOM-Komponenten:')} {scanBanner.scanned} · {t('neu:')} {scanBanner.added} · {t('aktualisiert:')} {scanBanner.updated}</Pill>}
@@ -1101,7 +1150,7 @@ export default function SbomTool() {
                   <td><VexPill v={f.vex_status} /></td>
                   <td>{f.decision ? t(DECISIONS.find(d => d[0] === f.decision)?.[1] || f.decision) : <span className="muted">{t('offen')}</span>}
                     {f.decision === 'accept' && f.accept_until && <span className="muted" style={{ display: 'block' }}>bis {fmtD(f.accept_until)}</span>}</td>
-                  <td>{f.owner || <span className="muted">—</span>}</td>
+                  <td>{f.owner || (product?.owner ? <span className="muted" title={t('vom Produkt übernommen')}>{product.owner}</span> : <span className="muted">—</span>)}</td>
                 </tr>
               ))}
               {!findRows.length && <tr><td colSpan={8} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
