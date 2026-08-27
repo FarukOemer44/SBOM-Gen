@@ -208,8 +208,11 @@ function FindingDrawer({ finding, onClose }) {
       '',
       '## Auswirkungen und Abhilfe',
       '- Status: behoben (VEX: fixed)',
-      '- Abhilfe: [Sicherheitsaktualisierung / Version eintragen]',
+      '- Abhilfe: ' + (f.fix_version ? f.component_name + ' ' + f.fix_version
+          : f.fixed_versions ? 'Version ' + f.fixed_versions : '[Sicherheitsaktualisierung eintragen]'),
       '- Maßnahmen für Nutzer: [eindeutige, verständliche Anleitung ergänzen]',
+      '',
+      ...(f.refs_json ? ['', '## Quellen', ...(() => { try { return JSON.parse(f.refs_json).map(r => '- ' + r.label + ': ' + r.url) } catch { return [] } })()] : []),
       '',
       '_Entwurf erzeugt am ' + new Date().toLocaleDateString('de-DE') + '. Vor Veröffentlichung fachlich prüfen und vervollständigen._',
     ].join('\n')
@@ -226,9 +229,55 @@ function FindingDrawer({ finding, onClose }) {
         {!!f.actively_exploited && <Pill kind="red" title="Art. 3 Nr. 42 — startet die Art.-14-Meldekette">Aktiv ausgenutzt</Pill>}
         <CloseX onClick={onClose} />
       </div>
-      <div style={{ marginTop: 6 }}>{sevPill(f)}</div>
+      <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {sevPill(f)}
+        {f.aliases && f.aliases.split(', ').filter(a => a.startsWith('CVE-')).map(a => <Pill key={a} kind="blue">{a}</Pill>)}
+        {f.cwe_ids && f.cwe_ids.split(', ').slice(0, 4).map(c => <Pill key={c} kind="neutral" title="Schwachstellenklasse">{c}</Pill>)}
+      </div>
       <div className="dsub">{f.component_purl ? f.component_purl + ' · ' : ''}{f.summary}</div>
-      <div className="dsub">Eingang: {intakeLabel(f.intake_channel)}</div>
+      <div className="dsub">
+        Eingang: {intakeLabel(f.intake_channel)}
+        {f.published ? ' · Advisory veröffentlicht: ' + fmtD(f.published) : ''}
+      </div>
+
+      {/* Behebung und Quellen — automatisch beim Abgleich aus OSV übernommen */}
+      <div className="fieldlab">Behebung <span className="fund">(aus dem Advisory, {'affected[].ranges'})</span></div>
+      {f.fixed_versions
+        ? (f.fixed_versions.startsWith('kein Fix')
+            ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Pill kind="red">Keine feste Version</Pill>
+                <span className="muted">{f.fixed_versions}</span></div>
+            : <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span className="muted">Behoben in:</span>
+                {f.fixed_versions.split(', ').map(v => (
+                  <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')}
+                    style={f.fix_version === v ? { borderColor: '#1298ff', color: '#1298ff' } : {}}
+                    title="Als Zielversion uebernehmen und Entscheidung auf Sofort beheben setzen"
+                    onClick={() => setF(x => ({ ...x, fix_version: v, decision: x.decision || 'fix_now' }))}>
+                    {f.component_name} {v}
+                  </button>
+                ))}
+                {f.fix_version && <Pill kind="green">Zielversion: {f.fix_version}</Pill>}
+              </div>)
+        : <span className="muted">Keine Versionsangabe im Advisory.</span>}
+
+      {f.refs_json && (() => {
+        let refs = []
+        try { refs = JSON.parse(f.refs_json) } catch { /* nichts anzeigen */ }
+        if (!refs.length) return null
+        return (
+          <>
+            <div className="fieldlab">Quellen <span className="fund">(Advisory, Fix-Commit, Projektseite)</span></div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {refs.map((r, i) => (
+                <a key={i} className="chip blue" href={r.url} target="_blank" rel="noreferrer noopener"
+                   style={{ textDecoration: 'none' }} title={r.url}>
+                  {r.label} ↗
+                </a>
+              ))}
+            </div>
+          </>
+        )
+      })()}
 
       <div className="fieldlab">Betroffenheit (VEX-Status) <span className="fund">— erster Triage-Schritt (PT2.2, Art. 13 Abs. 7)</span></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -754,21 +803,30 @@ export default function SbomTool() {
         </div>
         <div className="tblwrap sc">
           <table className="tbl">
-            <thead><tr><th>Schwere</th><th style={{ width: '30%' }}>Schwachstelle</th><th>Komponente</th><th>Betroffenheit</th><th>Entscheidung</th><th>Verantwortlich</th><th>Kenntnis</th></tr></thead>
+            <thead><tr><th>Schwere</th><th style={{ width: '28%' }}>Schwachstelle</th><th>Komponente</th><th>Behebung</th><th>Betroffenheit</th><th>Entscheidung</th><th>Verantwortlich</th></tr></thead>
             <tbody>
               {findRows.map(f => (
                 <tr key={f.id} className="row" onClick={() => setFindOpen(f)}>
                   <td>{sevPill(f)}{!!f.actively_exploited && <div style={{ marginTop: 4 }}><Pill kind="red">Aktiv ausgenutzt</Pill></div>}</td>
                   <td>
-                    <span className="link">{f.vuln_id}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: '#8B95A3' }}>{(f.summary || '').slice(0, 110)}</span>
+                    <span className="link">{(f.aliases || '').split(', ').find(a => a.startsWith('CVE-')) || f.vuln_id}</span>
+                    {(f.aliases || '').includes('CVE-') && <span style={{ display: 'block', fontSize: 11, color: '#B6C1CD' }}>{f.vuln_id}</span>}
+                    <span style={{ display: 'block', fontSize: 12, color: '#8B95A3' }}>{(f.summary || '').slice(0, 100)}</span>
                   </td>
                   <td>{f.component_name || '—'}</td>
+                  <td>
+                    {f.fix_version
+                      ? <Pill kind="green">→ {f.fix_version}</Pill>
+                      : f.fixed_versions
+                        ? (f.fixed_versions.startsWith('kein Fix')
+                            ? <Pill kind="red">kein Fix</Pill>
+                            : <span style={{ fontSize: 12.5, color: '#27AE60' }}>{f.fixed_versions.split(', ').slice(0, 2).join(', ')}</span>)
+                        : <span className="muted">—</span>}
+                  </td>
                   <td>{vexPill(f.vex_status)}</td>
                   <td>{f.decision ? (DECISIONS.find(d => d[0] === f.decision)?.[1] || f.decision) : <span className="muted">offen</span>}
                     {f.decision === 'accept' && f.accept_until && <span className="muted" style={{ display: 'block' }}>bis {fmtD(f.accept_until)}</span>}</td>
                   <td>{f.owner || <span className="muted">—</span>}</td>
-                  <td>{fmtD(f.became_known_at)}</td>
                 </tr>
               ))}
               {!findRows.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>

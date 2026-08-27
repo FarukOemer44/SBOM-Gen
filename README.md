@@ -26,9 +26,13 @@ Open <http://localhost:5200>. The database starts empty — that is intentional.
    [`sboms/acme-iot-gateway.cdx.json`](sboms/acme-iot-gateway.cdx.json) from this repository.
    → 732 components land in the inventory, the original file is archived.
 3. **Run the scan.** Click *CVE-Abgleich (OSV)*. Takes about 15–20 seconds.
-   → 337 findings, roughly 59 critical / 130 high / 123 medium / 25 low.
-4. **Triage a finding.** Open any row in the *Funde* tab: set affectedness (VEX), a decision,
-   an owner. Re-run the scan — your triage survives, only the severity data is refreshed.
+   → 337 findings, roughly 59 critical / 130 high / 123 medium / 25 low. 319 of them arrive with
+   a CVE number and a concrete fixed version, all 337 with links to the advisory, the NVD entry
+   and the project.
+4. **Triage a finding.** Open any row in the *Funde* tab. The drawer already shows the CVE
+   number, the weakness class, which versions fix it and where the advisory lives — click a
+   version to adopt it as the remediation target. Then set affectedness (VEX), a decision and an
+   owner. Re-run the scan: your triage survives, only advisory data is refreshed.
 5. **Create a second version** with *+ Version* (copying the components), change a component
    version, and look at the *Änderungen* tab: added / removed / version-changed, computed live.
 
@@ -153,19 +157,31 @@ Record schema: [OSV Schema](https://github.com/ossf/osv-schema).
 3. **Fetch details.** `GET https://api.osv.dev/v1/vulns/{id}` over the distinct IDs,
    `DETAIL_PARALLEL = 10` at a time. A failed detail request is tolerated; the finding is then
    stored with severity `—`.
-4. **Score locally.** The CVSS 3.x base score is computed from the vector string
+4. **Enrich.** Everything the advisory carries and a reviewer needs is extracted and stored, so
+   it shows up on the finding automatically — no extra lookup:
+   - `aliases` → the **CVE number**, shown as the primary identifier in the table (the GHSA id
+     stays underneath, because nobody recognises `GHSA-9m93-w8w6-76hh` but everybody knows
+     `CVE-2023-3696`)
+   - `affected[].ranges[].events[].fixed` → the **fixed versions** for *this* package, matched by
+     purl so other packages in the same advisory do not leak in. Where a range only carries
+     `last_affected`, the finding says so instead of pretending a fix exists.
+   - `references` plus derived links → **sources**: OSV, the GitHub advisory, the NVD entry for
+     each CVE alias, the fix commit and the project page
+   - `database_specific.cwe_ids` → weakness classes, and `published` → advisory date
+5. **Score locally.** The CVSS 3.x base score is computed from the vector string
    ([FIRST.org formula](https://www.first.org/cvss/v3.1/specification-document)) — OSV ships the
    vector but not the score. The GitHub severity label wins when present, otherwise thresholds on
    the computed score decide (`≥9` critical, `≥7` high, `≥4` medium).
-5. **Upsert findings**, keyed on `(vuln_id, component_id)`:
-   - **known finding** → only `severity`, `score`, `summary` and `updated_at` change. VEX status,
+6. **Upsert findings**, keyed on `(vuln_id, component_id)`:
+   - **known finding** → only the advisory-derived data changes: severity, score, summary,
+     aliases, CWEs, fixed versions, sources, `updated_at`. VEX status,
      decision, owner, exploitation evidence and the upstream fields are left alone. That is what
      makes a daily rescan safe.
    - **new finding** → `became_known_at = now`. This timestamp is the deadline anchor for
      regulatory reporting and is never derived from anything else.
    - Findings OSV no longer returns are **not** deleted. A disappearing match is not evidence that
      the product is unaffected.
-6. **Log it.** A row in `scans` plus an `audit_log` entry.
+7. **Log it.** A row in `scans` plus an `audit_log` entry.
 
 If OSV is unreachable the endpoint answers `502` and changes nothing. There is deliberately no
 fallback to cached data: a scan that did not happen must not look like one that did.
@@ -198,14 +214,17 @@ The drawer follows the order the work actually happens in:
    First, because "not affected" with a justification closes a finding without remediation, which
    is how the false positives inherent to SBOM matching get cleared.
 2. **Decision** — `fix_now` / `mitigate` / `accept` / `defer`. `accept` requires an expiry date;
-   `accept` and `defer` require a rationale.
+   `accept` and `defer` require a rationale. The fixed versions from the advisory are offered as
+   buttons: picking one writes it to `fix_version` and sets the decision to *fix now*, so the
+   remediation target is recorded rather than retyped.
 3. **Actively exploited** — a separate boolean with a mandatory evidence field. **Never derived
    from the CVSS score**: the legal definition requires reliable evidence of real-world
    exploitation, which a severity number is not. Setting it surfaces the reporting deadlines as a
    hint; the reporting chain itself belongs to a different module.
 4. **Upstream report** — who the vulnerability in a third-party component was reported to, when,
    and whether fix code was shared.
-5. **Advisory draft** — available once a finding is `fixed`; downloads a Markdown skeleton.
+5. **Advisory draft** — available once a finding is `fixed`; downloads a Markdown skeleton
+   pre-filled with the affected product and version, the remediation target and the source links.
    Publishing stays with the manufacturer.
 
 Findings that arrive outside the scanner — an email to the security contact, a supplier advisory,

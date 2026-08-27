@@ -71,6 +71,19 @@ db.exec(`
 const QUERY_CHUNK = 400      // purls je querybatch-Request
 const DETAIL_PARALLEL = 10   // parallele Detail-Abfragen an /v1/vulns
 
+// Spalten, die erst spaeter dazukamen — bestehende Datenbanken nachziehen
+for (const [col, ddl] of [
+  ['aliases', "TEXT DEFAULT ''"],          // CVE-Nummern zur OSV-/GHSA-ID
+  ['cwe_ids', "TEXT DEFAULT ''"],          // Schwachstellenklassen
+  ['published', "TEXT DEFAULT ''"],        // Veroeffentlichung des Advisories
+  ['fixed_versions', "TEXT DEFAULT ''"],   // Behebung: Versionen aus affected[].ranges
+  ['refs_json', "TEXT DEFAULT ''"],        // Advisory-Links (GitHub, NVD, OSV, Hersteller)
+  ['fix_version', "TEXT DEFAULT ''"],      // vom Bearbeiter gewaehlte Zielversion
+]) {
+  const has = db.prepare('PRAGMA table_info(findings)').all().some(c => c.name === col)
+  if (!has) db.exec(`ALTER TABLE findings ADD COLUMN ${col} ${ddl}`)
+}
+
 const uid = () => crypto.randomBytes(8).toString('hex')
 const now = () => new Date().toISOString()
 const audit = (action, detail = '') =>
@@ -259,6 +272,47 @@ function sevOf(rec) {
   return { label: label || '—', score }
 }
 
+// purl ohne Versionsanteil — Schluessel fuer Paketvergleiche
+const purlBase = (p) => {
+  const i = p.lastIndexOf('@')
+  return i > 0 ? p.slice(0, i) : p
+}
+
+// Behebung und Quellen aus dem OSV-Datensatz ziehen — beides liefert OSV mit,
+// wird aber nur nutzbar, wenn man es speichert und anzeigt.
+function remediationOf(rec, componentPurl) {
+  const base = purlBase(componentPurl)
+  const fixed = new Set(), lastAffected = new Set()
+  for (const a of rec.affected || []) {
+    const apurl = a.package?.purl
+    if (apurl && purlBase(apurl) !== base) continue     // anderes Paket im selben Advisory
+    for (const r of a.ranges || []) for (const e of r.events || []) {
+      if (e.fixed) fixed.add(e.fixed)
+      else if (e.last_affected) lastAffected.add(e.last_affected)
+    }
+  }
+  return { fixed: [...fixed], lastAffected: [...lastAffected] }
+}
+
+function sourcesOf(rec) {
+  const out = [], seen = new Set()
+  const add = (label, url) => { if (url && !seen.has(url)) { seen.add(url); out.push({ label, url }) } }
+  add('OSV', 'https://osv.dev/vulnerability/' + rec.id)
+  if (rec.id.startsWith('GHSA-')) add('GitHub Advisory', 'https://github.com/advisories/' + rec.id)
+  for (const a of rec.aliases || []) {
+    if (a.startsWith('CVE-')) add('NVD ' + a, 'https://nvd.nist.gov/vuln/detail/' + a)
+    if (a.startsWith('GHSA-')) add('GitHub Advisory', 'https://github.com/advisories/' + a)
+  }
+  const rank = { ADVISORY: 0, FIX: 1, REPORT: 2, PACKAGE: 3 }
+  for (const r of (rec.references || []).filter(r => r.type in rank).sort((x, y) => rank[x.type] - rank[y.type])) {
+    if (out.length >= 12) break
+    const label = r.type === 'FIX' ? 'Fix' : r.type === 'PACKAGE' ? 'Projekt'
+      : r.type === 'REPORT' ? 'Meldung' : 'Advisory'
+    add(label, r.url)
+  }
+  return out
+}
+
 app.post('/api/versions/:id/scan', async (req, res) => {
   const vid = req.params.id
   // Nur Software mit purl ist OSV-abgleichbar; Hardware läuft über Lieferanten-Advisories (Abschnitt 8.6).
@@ -292,16 +346,27 @@ app.post('/api/versions/:id/scan', async (req, res) => {
     // Upsert: Bewertung immer frisch, Bearbeitungsstand (VEX/Entscheidung/Nachweise) bleibt erhalten
     const existing = db.prepare('SELECT id, vuln_id, component_id FROM findings WHERE version_id = ?').all(vid)
     const ins = db.prepare(`INSERT INTO findings (id, version_id, component_id, vuln_id, severity, score, summary,
-      intake_channel, became_known_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'osv_scan', ?, ?, ?)`)
-    const upd = db.prepare('UPDATE findings SET severity=?, score=?, summary=?, updated_at=? WHERE id=?')
+      aliases, cwe_ids, published, fixed_versions, refs_json,
+      intake_channel, became_known_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'osv_scan', ?, ?, ?)`)
+    const upd = db.prepare(`UPDATE findings SET severity=?, score=?, summary=?,
+      aliases=?, cwe_ids=?, published=?, fixed_versions=?, refs_json=?, updated_at=? WHERE id=?`)
     let added = 0, updated = 0
     for (const h of hits) {
       const rec = details[h.vulnId]
       const { label, score } = rec ? sevOf(rec) : { label: '—', score: null }
       const summary = rec?.summary || 'osv.dev/vulnerability/' + h.vulnId
+      const aliases = (rec?.aliases || []).join(', ')
+      const cwe = (rec?.database_specific?.cwe_ids || []).join(', ')
+      const published = rec?.published || ''
+      const rem = rec ? remediationOf(rec, h.comp.purl) : { fixed: [], lastAffected: [] }
+      const fixedVersions = rem.fixed.length ? rem.fixed.join(', ')
+        : rem.lastAffected.length ? 'kein Fix — betroffen bis ' + rem.lastAffected.join(', ') : ''
+      const refs = rec ? JSON.stringify(sourcesOf(rec)) : ''
       const match = existing.find(e => e.vuln_id === h.vulnId && e.component_id === h.comp.id)
-      if (match) { upd.run(label, score, summary, now(), match.id); updated++ }
-      else { ins.run(uid(), vid, h.comp.id, h.vulnId, label, score, summary, now(), now(), now()); added++ }
+      if (match) { upd.run(label, score, summary, aliases, cwe, published, fixedVersions, refs, now(), match.id); updated++ }
+      else { ins.run(uid(), vid, h.comp.id, h.vulnId, label, score, summary, aliases, cwe, published,
+                     fixedVersions, refs, now(), now(), now()); added++ }
     }
     db.prepare('INSERT INTO scans (id, version_id, ran_at, source, components_scanned, findings_new, findings_updated) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(uid(), vid, now(), 'OSV.dev (' + comps.length + ' Komponenten, ' + ids.length + ' Schwachstellen bewertet)', comps.length, added, updated)
@@ -329,7 +394,7 @@ app.post('/api/versions/:id/findings', (req, res) => {
 
 const FINDING_FIELDS = ['vex_status', 'vex_justification', 'decision', 'decision_rationale', 'accept_until',
   'owner', 'became_known_at', 'actively_exploited', 'exploit_evidence',
-  'upstream_reported_to', 'upstream_reported_at', 'upstream_fix_shared']
+  'upstream_reported_to', 'upstream_reported_at', 'upstream_fix_shared', 'fix_version']
 app.patch('/api/findings/:id', (req, res) => {
   const cur = db.prepare('SELECT * FROM findings WHERE id = ?').get(req.params.id)
   if (!cur) return res.status(404).json({ error: 'nicht gefunden' })
@@ -337,10 +402,11 @@ app.patch('/api/findings/:id', (req, res) => {
   for (const k of FINDING_FIELDS) if (req.body[k] !== undefined) f[k] = req.body[k]
   db.prepare(`UPDATE findings SET vex_status=?, vex_justification=?, decision=?, decision_rationale=?, accept_until=?,
     owner=?, became_known_at=?, actively_exploited=?, exploit_evidence=?,
-    upstream_reported_to=?, upstream_reported_at=?, upstream_fix_shared=?, updated_at=? WHERE id=?`)
+    upstream_reported_to=?, upstream_reported_at=?, upstream_fix_shared=?, fix_version=?, updated_at=? WHERE id=?`)
     .run(f.vex_status, f.vex_justification, f.decision, f.decision_rationale, f.accept_until,
       f.owner, f.became_known_at, f.actively_exploited ? 1 : 0, f.exploit_evidence,
-      f.upstream_reported_to, f.upstream_reported_at, f.upstream_fix_shared ? 1 : 0, now(), req.params.id)
+      f.upstream_reported_to, f.upstream_reported_at, f.upstream_fix_shared ? 1 : 0, f.fix_version || '',
+      now(), req.params.id)
   audit('finding.update', cur.vuln_id)
   res.json(versionData(cur.version_id))
 })
@@ -352,10 +418,6 @@ app.get('/api/audit', (_req, res) =>
 // Vergleicht das Komponenteninventar einer Version mit ihrer Vorversion (copied_from,
 // sonst die zeitlich vorangehende Version desselben Produkts). Match über purl ohne
 // Versionsanteil, sonst Typ+Name — so wird "gleiche Komponente, neue Version" erkannt.
-const purlBase = (p) => {
-  const i = p.lastIndexOf('@')
-  return i > 0 ? p.slice(0, i) : p
-}
 app.get('/api/versions/:id/diff', (req, res) => {
   const v = db.prepare('SELECT * FROM versions WHERE id = ?').get(req.params.id)
   if (!v) return res.status(404).json({ error: 'Version nicht gefunden' })
