@@ -1,5 +1,6 @@
 import React from 'react'
 import { useStore } from './store.jsx'
+import { useI18n } from './i18n.jsx'
 
 const sbomIcon = (c) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -10,6 +11,7 @@ const sbomIcon = (c) => (
 
 export default function Shell({ children }) {
   const { dbStatus } = useStore()
+  const { lang, setLang, t } = useI18n()
   return (
     <div className="shell">
       <aside className="sidebar sc">
@@ -19,15 +21,24 @@ export default function Shell({ children }) {
         <nav className="sidenav">
           <div className="nav-caption">CRA</div>
           <div className="nl active">
-            <span className="lab">{sbomIcon('#1298ff')}SBOM &amp; Komponenten</span>
+            <span className="lab">{sbomIcon('#1298ff')}{t('SBOM & Komponenten')}</span>
           </div>
         </nav>
         <div className="nav-footer">
           <div className="nl" style={{ padding: '4px 10px', pointerEvents: 'none' }}>
-            <span className="lab" style={{ fontSize: 11, color: dbStatus === 'SQLite' ? '#3EC556' : '#F5A623' }}>● Datenbank: {dbStatus}</span>
+            <span className="lab" style={{ fontSize: 11, color: dbStatus === 'SQLite' ? '#3EC556' : '#F5A623' }}>● {t('Datenbank:')} {t(dbStatus) === dbStatus ? dbStatus : t(dbStatus)}</span>
           </div>
           <div className="nl" style={{ padding: '4px 10px', pointerEvents: 'none' }}>
-            <span className="lab" style={{ fontSize: 11, color: '#B6C1CD' }}>CRA-Modul · SBOM-Gen</span>
+            <span className="lab" style={{ fontSize: 11, color: '#B6C1CD' }}>{t('CRA-Modul · SBOM-Gen')}</span>
+          </div>
+          <div className="seg" style={{ margin: '10px 0 0', height: 32 }} role="group" aria-label="Sprache / Language">
+            {[['de', 'Deutsch'], ['en', 'English']].map(([code, label]) => (
+              <div key={code} className={'fseg' + (lang === code ? ' active' : '')}
+                onClick={() => setLang(code)} title={label}
+                style={{ fontSize: 12.5, fontWeight: lang === code ? 600 : 500 }}>
+                {code.toUpperCase()}
+              </div>
+            ))}
           </div>
         </div>
       </aside>

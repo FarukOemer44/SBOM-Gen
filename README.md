@@ -38,6 +38,19 @@ Open <http://localhost:5200>. The database starts empty — that is intentional.
 
 Separate processes if you prefer: `npm run server` and `npm run dev`.
 
+### Language
+
+The interface ships in **German and English**. The switch sits at the bottom left of the sidebar
+(`DE` / `EN`); the choice is remembered per browser in `localStorage`.
+
+German is the source language and doubles as the translation key: `src/i18n.jsx` maps every German
+string to its English counterpart, and a missing entry falls back to the German text — visible, but
+never broken. To add a language, copy the `EN` map, translate the values and extend the switch in
+`src/Shell.jsx`. Legal citations keep their local form on both sides (`Art. 13 Abs. 5` ↔
+`Art. 13(5)`, `Anhang I Teil II Nr. 1` ↔ `Annex I Part II No. 1`), so a reader can look them up in
+the language version of the regulation they actually have open. The generated advisory draft follows
+the selected language too.
+
 ### Requirements
 
 Node.js 18 or newer (the server uses the built-in `fetch`) and outbound HTTPS to `api.osv.dev`.

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useT } from './i18n.jsx'
 
 const Ctx = createContext(null)
 
@@ -50,13 +51,7 @@ export function StoreProvider({ children }) {
     j('GET', '/api/versions/' + sel.vid).then(setData).catch(() => setData(null))
   }, [sel.vid])
 
-  if (dbStatus === 'fehler' && !products) return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'DM Sans, sans-serif' }}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: '#0B1928' }}>Datenbank nicht erreichbar</div>
-      <div style={{ fontSize: 13, color: '#69778E' }}>API-Server starten: <code>npm run server</code> (Port 5178)</div>
-      <button className="ab" onClick={() => { setDbStatus('lädt'); loadProducts() }}>Erneut verbinden</button>
-    </div>
-  )
+  if (dbStatus === 'fehler' && !products) return <DbError onRetry={() => { setDbStatus('lädt'); loadProducts() }} />
   if (!products) return null
 
   const product = products.find(p => p.id === sel.pid) || null
@@ -81,6 +76,17 @@ export function StoreProvider({ children }) {
     reloadProducts: loadProducts,
   }
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
+}
+
+function DbError({ onRetry }) {
+  const t = useT()
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'DM Sans, sans-serif' }}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: '#0B1928' }}>{t('Datenbank nicht erreichbar')}</div>
+      <div style={{ fontSize: 13, color: '#69778E' }}>{t('API-Server starten:')} <code>npm run server</code> (Port 5178)</div>
+      <button className="ab" onClick={onRetry}>{t('Erneut verbinden')}</button>
+    </div>
+  )
 }
 
 export const useStore = () => useContext(Ctx)

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useT } from './i18n.jsx'
 
 export const Pill = ({ kind = 'neutral', children, title }) => <span className={'pill ' + kind} title={title}>{children}</span>
 
@@ -37,10 +38,11 @@ export function TitleBar({ title, children }) {
 }
 
 export function SearchBox({ value, onChange }) {
+  const t = useT()
   return (
     <span className="searchbox">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#9AA4B2" strokeWidth="1.8" /><path d="M20 20l-3.5-3.5" stroke="#9AA4B2" strokeWidth="1.8" strokeLinecap="round" /></svg>
-      <input placeholder="Suchen …" value={value} onChange={e => onChange(e.target.value)} />
+      <input placeholder={t('Suchen …')} value={value} onChange={e => onChange(e.target.value)} />
     </span>
   )
 }

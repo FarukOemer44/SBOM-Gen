@@ -369,7 +369,7 @@ app.post('/api/versions/:id/scan', async (req, res) => {
                      fixedVersions, refs, now(), now(), now()); added++ }
     }
     db.prepare('INSERT INTO scans (id, version_id, ran_at, source, components_scanned, findings_new, findings_updated) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(uid(), vid, now(), 'OSV.dev (' + comps.length + ' Komponenten, ' + ids.length + ' Schwachstellen bewertet)', comps.length, added, updated)
+      .run(uid(), vid, now(), 'OSV.dev', comps.length, added, updated)
     audit('scan.run', comps.length + ' Komponenten · +' + added + ' / ~' + updated)
     res.json({ ...versionData(vid), scan: { scanned: comps.length, added, updated } })
   } catch (e) {
