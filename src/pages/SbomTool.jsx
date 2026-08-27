@@ -469,8 +469,6 @@ function FindingDrawer({ finding, onClose }) {
 function SbomDrawer({ sbom, onClose }) {
   const t = useT()
   const { call } = useStore()
-  const [loc, setLoc] = useState(sbom.access_location || '')
-  const locTimer = useRef(null)
   const patch = (body) => call('PATCH', '/api/sboms/' + sbom.id, body)
   const del = async () => { if (confirm(t('SBOM-Stand löschen? (Komponenten bleiben im Inventar)'))) { await call('DELETE', '/api/sboms/' + sbom.id); onClose() } }
   return (
@@ -487,17 +485,6 @@ function SbomDrawer({ sbom, onClose }) {
         <span className={'tabpill' + (sbom.depth === 'top_level' ? ' active' : '')} onClick={() => patch({ depth: 'top_level' })}>{t('Oberste Abhängigkeiten')}</span>
         <span className={'tabpill' + (sbom.depth === 'full' ? ' active' : '')} onClick={() => patch({ depth: 'full' })}>{t('Vollständig aufgelöst')}</span>
       </div>
-
-      <div className="fieldlab">{t('An Nutzer bereitgestellt?')}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Toggle on={!!sbom.provided_to_users} onChange={v => patch({ provided_to_users: v })} />
-        <span className="muted">{sbom.provided_to_users ? 'Ja — Zugangsort unten angeben (wandert in die Nutzerinformationen)' : 'Nein (Standard)'}</span>
-      </div>
-      {!!sbom.provided_to_users && (
-        <input className="field" style={{ marginTop: 8 }} value={loc}
-          onChange={e => { const v = e.target.value; setLoc(v); clearTimeout(locTimer.current); locTimer.current = setTimeout(() => patch({ access_location: v }), 700) }}
-          placeholder={t('Zugangsort, z. B. https://…/sbom')} />
-      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
         <button className="hb" style={{ color: '#DC2626', marginRight: 'auto' }} onClick={del}>{t('Löschen')}</button>
@@ -936,6 +923,12 @@ export default function SbomTool() {
     <main className="main">
       <TitleBar title={t('SBOM & Komponenten')}>
         <SearchBox value={q} onChange={setQ} />
+        {(tab === 'komponenten' || tab === 'funde') && (
+          <button className={'hb' + (activeFilters ? ' on' : '')} onClick={() => setModal('filter')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
+            {t('Filter')}{activeFilters ? ' (' + activeFilters + ')' : ''}
+          </button>
+        )}
         <button className="hb" onClick={runScan} disabled={busy || !components.some(c => c.purl && c.kind !== 'hardware')}>
           {busy ? t('Bitte warten …') : t('CVE-Abgleich (OSV)')}
         </button>
@@ -997,13 +990,6 @@ export default function SbomTool() {
         <span className={'tabpill' + (tab === 'funde' ? ' active' : '')} onClick={() => setTab('funde')}>{t('Funde')} ({findRows.length !== findings.length ? findRows.length + ' / ' : ''}{findings.length})</span>
         <span className={'tabpill' + (tab === 'aenderungen' ? ' active' : '')} onClick={() => setTab('aenderungen')}>{t('Änderungen')}</span>
         <span style={{ flex: 1 }} />
-        {(tab === 'komponenten' || tab === 'funde') && (
-          <button className={'hb sm' + (activeFilters ? ' on' : '')} onClick={() => setModal('filter')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
-            {t('Filter')}{activeFilters ? ' (' + activeFilters + ')' : ''}
-          </button>
-        )}
-        <span style={{ flex: 1 }} />
       </div>
 
       {/* ---------- Reiter 1: Komponenten (Inventar = Obermenge, Abschnitt 1.6) ---------- */}
@@ -1054,7 +1040,7 @@ export default function SbomTool() {
       {tab === 'sboms' && <>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
-            <thead><tr><th style={{ width: '30%' }}>{t('Datei')}</th><th>{t('Format')}</th><th>{t('Tiefe')}</th><th>{t('Erstellt')}</th><th>{t('Importiert')}</th><th>{t('Komponenten')}</th><th>{t('Nutzer-Bereitstellung')}</th></tr></thead>
+            <thead><tr><th style={{ width: '30%' }}>{t('Datei')}</th><th>{t('Format')}</th><th>{t('Tiefe')}</th><th>{t('Erstellt')}</th><th>{t('Importiert')}</th><th>{t('Komponenten')}</th></tr></thead>
             <tbody>
               {sboms.map(s => (
                 <tr key={s.id} className="row" onClick={() => setSbomOpen(s)}>
@@ -1064,10 +1050,9 @@ export default function SbomTool() {
                   <td>{s.generated_at ? fmtD(s.generated_at) : '—'}</td>
                   <td>{fmtD(s.imported_at)}</td>
                   <td>{s.component_count}</td>
-                  <td>{s.provided_to_users ? <Pill kind="green">{t('Ja')}</Pill> : <Pill kind="neutral">{t('Nein')}</Pill>}</td>
                 </tr>
               ))}
-              {!sboms.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
+              {!sboms.length && <tr><td colSpan={6} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
                 {t('Noch keine SBOM für')} {product?.name} {version?.version} {t('— oben „SBOM importieren" (CycloneDX- oder SPDX-JSON).')}</td></tr>}
             </tbody>
           </table>

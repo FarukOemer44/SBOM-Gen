@@ -333,7 +333,7 @@ Without that, upgrading `lodash@4.17.20` to `4.17.21` would read as "removed + a
 | `POST` | `/api/versions/:id/components` | add a component (mainly hardware) |
 | `PATCH` `DELETE` | `/api/components/:id` | update / delete |
 | `POST` | `/api/versions/:id/sboms` | import an SBOM |
-| `PATCH` | `/api/sboms/:id` | depth, user-provision flag, access location |
+| `PATCH` | `/api/sboms/:id` | depth |
 | `GET` | `/api/sboms/:id/download` | original JSON |
 | `POST` | `/api/versions/:id/scan` | OSV matching |
 | `POST` | `/api/versions/:id/findings` | enter a finding manually |
