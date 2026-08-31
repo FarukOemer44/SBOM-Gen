@@ -224,8 +224,10 @@ const EN = {
   'Bekannt seit': 'Known since',
   'Nein / keine Nachweise': 'No / no evidence',
   'Meldung an den Komponenten-Hersteller': 'Report to the component manufacturer',
+  'Wird eine Schwachstelle in einer fremden Komponente gefunden, ist sie an deren Hersteller oder das zuständige Projekt zu melden — auch bei quelloffener Software. Wurde bereits eine Korrektur erstellt, ist sie mitzuteilen.':
+    'If a vulnerability is found in a third-party component, it has to be reported to its manufacturer or the project that maintains it — open-source components included. If a fix has already been produced, it has to be shared.',
   'Gemeldet an — Projekt oder Lieferant': 'Reported to — project or supplier',
-  'Fix-Code oder Unterlagen geteilt': 'Fix code or documentation shared',
+  'Korrektur oder Unterlagen weitergegeben': 'Fix or documentation shared',
 
   // --- Fund erfassen ---
 

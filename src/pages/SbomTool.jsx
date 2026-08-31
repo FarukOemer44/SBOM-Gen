@@ -599,14 +599,14 @@ function FindingDrawer({ finding, onClose }) {
           placeholder={t('Nachweis: worauf stützt sich die Einstufung?')} onChange={e => set('exploit_evidence', e.target.value, { debounce: true })} />
       </>}
 
-      <div className="fieldlab">{t('Meldung an den Komponenten-Hersteller')}</div>
+      <div className="fieldlab">{t('Meldung an den Komponenten-Hersteller')}<HelpDot text={t('Wird eine Schwachstelle in einer fremden Komponente gefunden, ist sie an deren Hersteller oder das zuständige Projekt zu melden — auch bei quelloffener Software. Wurde bereits eine Korrektur erstellt, ist sie mitzuteilen.')} /></div>
       <div style={{ display: 'flex', gap: 12 }}>
         <input className="field" style={{ flex: 2 }} value={f.upstream_reported_to} placeholder={t('Gemeldet an — Projekt oder Lieferant')} onChange={e => set('upstream_reported_to', e.target.value, { debounce: true })} />
         <input type="date" className="field" style={{ flex: 1 }} value={f.upstream_reported_at} onChange={e => set('upstream_reported_at', e.target.value)} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
         <Toggle on={!!f.upstream_fix_shared} onChange={v => set('upstream_fix_shared', v ? 1 : 0)} />
-        <span className="muted">{t('Fix-Code oder Unterlagen geteilt')}</span>
+        <span className="muted">{t('Korrektur oder Unterlagen weitergegeben')}</span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
