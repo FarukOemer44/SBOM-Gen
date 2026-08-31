@@ -66,6 +66,9 @@ const EN = {
   'Typ': 'Type',
   'Version': 'Version',
   'Lieferant': 'Supplier',
+  'Beschreibung': 'Description',
+  'z. B. Touch-Display der Bedieneinheit, 7 Zoll': 'e.g. touch display of the control unit, 7 inch',
+  'z. B. Bibliothek für die Verschlüsselung der Gerätekommunikation': 'e.g. library encrypting device communication',
   'Lizenz': 'License',
   'Schwachstellen': 'Vulnerabilities',
   'Sorgfalt': 'Due diligence',
@@ -162,8 +165,6 @@ const EN = {
     'Applies to every finding of this product. Individual findings can be assigned to someone else.',
   'vom Produkt übernommen': 'inherited from the product',
   'Entfernen': 'Remove',
-  'Ein Produkt kann mehrere SBOMs haben — etwa je Artefakt (Backend, Firmware). Alle laufen in ein Komponenteninventar.':
-    'A product can have several SBOMs — one per artifact, say backend and firmware. They all feed one component inventory.',
   '(optional — später jederzeit im Reiter SBOMs)': '(optional — you can add it any time from the SBOMs tab)',
   'Wird hereingezogen über': 'Pulled in via',
   'Produkt': 'Product',
@@ -193,15 +194,11 @@ const EN = {
   'Sicherheitsupdates bis': 'Security updates until',
   '(Monat und Jahr)': '(month and year)',
   'kürzer als fünf Jahre — nur mit Begründung zulässig': 'shorter than five years — allowed only with justification',
-  'Artefakt': 'Artifact',
-  'Der Teil des Produkts, in dem diese Komponente steckt — etwa Backend, Firmware oder App. Beim Import wird er aus dem Kopf der SBOM übernommen; steht dort nichts, selbst eintragen.': 'The part of the product this component sits in — backend, firmware or app, for example. On import it is taken from the SBOM header; if nothing is stated there, enter it yourself.',
   'z. B. Gerät, Baugruppe': 'e.g. device, assembly',
   'z. B. Backend, Firmware': 'e.g. backend, firmware',
-  'ohne Zuordnung': 'unassigned',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   'Paket-Kennung (purl)': 'Package ID (purl)',
-  'Die Lizenz der Komponente, so wie sie in der SBOM steht. Sie wird nur festgehalten und nicht geprüft — Lizenzfragen sind kein Gegenstand der Verordnung.': 'The licence of the component exactly as stated in the SBOM. It is recorded only and not assessed — licensing is not a matter the Regulation covers.',
   'z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor':
     'e.g. the supplier’s security contact and update commitments are on file',
   'Komponente löschen? Zugehörige Funde werden mit entfernt.': 'Delete this component? Its findings are removed with it.',
@@ -233,6 +230,8 @@ const EN = {
 
   // --- SBOM-Drawer ---
   'Nur direkte Abhängigkeiten': 'Direct dependencies only',
+  'Vorgeschrieben sind mindestens die direkten Abhängigkeiten. Ob die Datei darüber hinausgeht, wird beim Import aus dem Abhängigkeitsbaum abgelesen.':
+    'At least the direct dependencies are required. Whether the file goes further is read from the dependency tree on import.',
   'Alle Abhängigkeiten': 'All dependencies',
   'SBOM-Stand löschen? (Komponenten bleiben im Inventar)': 'Delete this SBOM snapshot? (components stay in the inventory)',
   'Komponenten · erstellt': 'components · generated',

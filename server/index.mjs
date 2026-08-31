@@ -101,6 +101,9 @@ for (const [col, ddl] of [
   // Mehrere Artefakte werden mit Komma gefuehrt — dieselbe Bibliothek kann
   // in Backend und Firmware stecken.
   ['artifact', "TEXT DEFAULT ''"],
+  // Freitext, nur bei Hardware und Zukauf gepflegt: Name und Version sagen dort
+  // oft nicht, worum es sich handelt.
+  ['description', "TEXT DEFAULT ''"],
 ]) {
   const has = db.prepare('PRAGMA table_info(components)').all().some(c => c.name === col)
   if (!has) db.exec(`ALTER TABLE components ADD COLUMN ${col} ${ddl}`)
@@ -300,13 +303,13 @@ app.post('/api/versions/:id/components', (req, res) => {
   if (!c.name?.trim()) return res.status(400).json({ error: 'Name fehlt' })
   db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
     is_direct, is_core_function, dd_status, dd_note, supplier_address, acquired_at, supplier_support_until,
-    artifact, source, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 'manuell', ?)`)
+    artifact, description, source, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 'manuell', ?)`)
     .run(uid(), req.params.id, c.kind || 'hardware', c.name.trim(), c.version || '', c.supplier || '',
       c.purl || '', c.cpe || '', c.license || '', c.is_core_function ? 1 : 0,
       c.dd_status || 'offen', c.dd_note || '',
       c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '',
-      c.artifact || '', now())
+      c.artifact || '', c.description || '', now())
   audit('component.create', c.name)
   res.json(versionData(req.params.id))
 })
@@ -317,10 +320,11 @@ app.patch('/api/components/:id', (req, res) => {
   const c = { ...cur, ...req.body }
   db.prepare(`UPDATE components SET kind=?, name=?, version=?, supplier=?, purl=?, cpe=?, license=?,
     is_core_function=?, dd_status=?, dd_note=?,
-    supplier_address=?, acquired_at=?, supplier_support_until=?, artifact=? WHERE id=?`)
+    supplier_address=?, acquired_at=?, supplier_support_until=?, artifact=?, description=? WHERE id=?`)
     .run(c.kind, c.name, c.version, c.supplier, c.purl, c.cpe, c.license,
       c.is_core_function ? 1 : 0, c.dd_status, c.dd_note,
-      c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '', c.artifact || '', req.params.id)
+      c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '',
+      c.artifact || '', c.description || '', req.params.id)
   audit('component.update', c.name)
   res.json(versionData(cur.version_id))
 })

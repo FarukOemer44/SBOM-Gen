@@ -310,7 +310,7 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
   const blank = {
     kind: 'hardware', name: '', version: '', supplier: '', purl: '', license: '',
     is_core_function: 0, dd_status: 'offen', dd_note: '',
-    artifact: '', supplier_address: '', acquired_at: '', supplier_support_until: '',
+    artifact: '', description: '', supplier_address: '', acquired_at: '', supplier_support_until: '',
   }
   // Bestehende Komponente speichert automatisch; eine neue braucht den Anlegen-Schritt.
   const [auto, setAuto, saved] = useAutoSave(comp ? '/api/components/' + comp.id : '', comp ? { ...comp } : blank, call)
@@ -346,17 +346,18 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
       </div>
       <div className="fieldlab">{t('Lieferant')} {isOwn && <span className="fund">{t('— entfällt bei Eigenentwicklung')}</span>}</div>
       <input className="field" value={f.supplier} onChange={e => set('supplier', e.target.value, { debounce: true })} disabled={isOwn} />
+
+      {(isHw || f.kind === 'software_zukauf') && <>
+        <div className="fieldlab">{t('Beschreibung')}</div>
+        <textarea className="field" rows={2} value={f.description || ''}
+          onChange={e => set('description', e.target.value, { debounce: true })}
+          placeholder={isHw ? t('z. B. Touch-Display der Bedieneinheit, 7 Zoll')
+            : t('z. B. Bibliothek für die Verschlüsselung der Gerätekommunikation')} />
+      </>}
       {!isHw && <>
         <div className="fieldlab">{t('Paket-Kennung (purl)')}<HelpDot text={t('Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.')} /></div>
         <input className="field" value={f.purl} onChange={e => set('purl', e.target.value, { debounce: true })} placeholder="pkg:npm/lodash@4.17.21" />
       </>}
-      <div className="fieldlab">{t('Artefakt')}<HelpDot text={t('Der Teil des Produkts, in dem diese Komponente steckt — etwa Backend, Firmware oder App. Beim Import wird er aus dem Kopf der SBOM übernommen; steht dort nichts, selbst eintragen.')} /></div>
-      <input className="field" value={f.artifact || ''} onChange={e => set('artifact', e.target.value, { debounce: true })}
-        placeholder={f.kind === 'hardware' ? t('z. B. Gerät, Baugruppe') : t('z. B. Backend, Firmware')} />
-
-      <div className="fieldlab">{t('Lizenz')}<HelpDot text={t('Die Lizenz der Komponente, so wie sie in der SBOM steht. Sie wird nur festgehalten und nicht geprüft — Lizenzfragen sind kein Gegenstand der Verordnung.')} /></div>
-      <input className="field" value={f.license} onChange={e => set('license', e.target.value, { debounce: true })} />
-
       {!isOwn && f.kind !== 'software_oss' && <>
         <div className="fieldlab">{t('Anschrift des Lieferanten')} <span className="fund">{t('— 10 Jahre aufbewahren, für Behördenanfragen')}</span></div>
         <textarea className="field" rows={2} value={f.supplier_address || ''}
@@ -620,7 +621,6 @@ function FindingDrawer({ finding, onClose }) {
 function SbomDrawer({ sbom, onClose }) {
   const t = useT()
   const { call } = useStore()
-  const patch = (body) => call('PATCH', '/api/sboms/' + sbom.id, body)
   const del = async () => { if (confirm(t('SBOM-Stand löschen? (Komponenten bleiben im Inventar)'))) { await call('DELETE', '/api/sboms/' + sbom.id); onClose() } }
   return (
     <Drawer onClose={onClose}>
@@ -631,11 +631,8 @@ function SbomDrawer({ sbom, onClose }) {
       </div>
       <div className="dsub">{sbom.component_count} {t('Komponenten · erstellt')} {sbom.generated_at ? fmtDT(sbom.generated_at) : '—'} {t('· importiert')} {fmtDT(sbom.imported_at)} · {(sbom.bytes / 1024).toFixed(1)} KB</div>
 
-      <div className="fieldlab">{t('Tiefe')}</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <span className={'tabpill' + (sbom.depth === 'top_level' ? ' active' : '')} onClick={() => patch({ depth: 'top_level' })}>{t('Nur direkte Abhängigkeiten')}</span>
-        <span className={'tabpill' + (sbom.depth === 'full' ? ' active' : '')} onClick={() => patch({ depth: 'full' })}>{t('Alle Abhängigkeiten')}</span>
-      </div>
+      <div className="fieldlab">{t('Tiefe')}<HelpDot text={t('Vorgeschrieben sind mindestens die direkten Abhängigkeiten. Ob die Datei darüber hinausgeht, wird beim Import aus dem Abhängigkeitsbaum abgelesen.')} /></div>
+      <div>{sbom.depth === 'top_level' ? t('Nur direkte Abhängigkeiten') : t('Alle Abhängigkeiten')}</div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
         <button className="hb" style={{ color: '#DC2626', marginRight: 'auto' }} onClick={del}>{t('Löschen')}</button>
@@ -890,20 +887,6 @@ function FilterDrawer({ tab, f, set, counts, onClose }) {
           <Chip active={f.compSev === 'none'} count={counts.compSev.none}
             onClick={() => set({ compSev: f.compSev === 'none' ? null : 'none' })}>{t('Ohne Funde')} </Chip>
         </FilterRow>
-        {Object.keys(counts.artifact).length > 0 && (
-          <FilterRow label={t('Artefakt')}>
-            <Chip active={!f.artifact} onClick={() => set({ artifact: null })}>{t('Alle')} </Chip>
-            {Object.entries(counts.artifact).map(([a, n]) => (
-              <Chip key={a} active={f.artifact === a} count={n}
-                onClick={() => set({ artifact: f.artifact === a ? null : a })}>{a} </Chip>
-            ))}
-            {counts.ohneArtefakt > 0 && (
-              <Chip active={f.artifact === '—'} count={counts.ohneArtefakt}
-                onClick={() => set({ artifact: f.artifact === '—' ? null : '—' })}>{t('ohne Zuordnung')} </Chip>
-            )}
-          </FilterRow>
-        )}
-
         <FilterRow label={t('Sorgfalt')}>
           <Chip active={!f.compDd} onClick={() => set({ compDd: false })}>{t('Alle')} </Chip>
           <Chip active={f.compDd} count={counts.ddOpen} disabled={!counts.ddOpen}
@@ -1323,7 +1306,7 @@ export default function SbomTool() {
       {/* ---------- Reiter 2: SBOMs je Version ---------- */}
       {tab === 'sboms' && <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
-          <span className="muted" style={{ flex: 1 }}>{t('Ein Produkt kann mehrere SBOMs haben — etwa je Artefakt (Backend, Firmware). Alle laufen in ein Komponenteninventar.')}</span>
+          <span style={{ flex: 1 }} />
           <button className="ab sm" onClick={() => fileRef.current?.click()} disabled={!version}>{t('SBOM importieren')}</button>
         </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
