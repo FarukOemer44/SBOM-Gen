@@ -174,6 +174,10 @@ const EN = {
   'Wird hereingezogen über': 'Pulled in via',
   'Nicht behebbar an': 'Cannot be fixed on',
   'selbst — aktualisiert werden muss die direkte Abhängigkeit': 'itself — the direct dependency to update is',
+  'Euer Produkt': 'Your product',
+  'Produkt': 'Product',
+  'Produkt → direkt eingebunden → … → verwundbare Komponente':
+    'product → direct dependency → … → vulnerable component',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',

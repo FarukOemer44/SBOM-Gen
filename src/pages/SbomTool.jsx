@@ -49,7 +49,10 @@ const intakeLabel = v => (INTAKE.find(x => x[0] === v) || [v, v])[1]
 async function importSbomInto(versionId, file, call, t) {
   const text = await file.text()
   const jx = JSON.parse(text)
-  const raw = jx.components || jx.packages || []
+  // CycloneDX erlaubt verschachtelte components[]; ohne Aufloesung fehlen Komponenten
+  // im Inventar und der Abhaengigkeitsgraph bekommt Luecken.
+  const flatten = (lst) => (lst || []).flatMap(c => [c, ...flatten(c.components)])
+  const raw = jx.components ? flatten(jx.components) : (jx.packages || [])
   if (!raw.length) throw new Error(t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.'))
   const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
   const directRefs = new Set((jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || []))
@@ -199,35 +202,7 @@ function NewVersionModal({ onClose }) {
         { version: ver, copyFrom: sel.vid, mode }, { reloadProducts: true })
 
       if (mode === 'new_sbom' && file) {
-        // Neue SBOM direkt in die frisch angelegte Version importieren
-        const text = await file.text()
-        const jx = JSON.parse(text)
-        const raw = jx.components || jx.packages || []
-        if (!raw.length) throw new Error(t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.'))
-        // Direkte Abhaengigkeiten aus dem Abhaengigkeitsgraph (CycloneDX) bzw. den
-        // SPDX-Relationships bestimmen — nur fuer sie ist die Sorgfaltspruefung sinnvoll.
-        const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
-        const directRefs = new Set(
-          (jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || [])
-        )
-        const spdxDirect = new Set(
-          (jx.relationships || []).filter(r => r.relationshipType === 'DEPENDS_ON'
-            && r.spdxElementId === (jx.documentDescribes?.[0] || 'SPDXRef-DOCUMENT'))
-            .map(r => r.relatedSpdxElement)
-        )
-        const list = raw.map(c => ({
-          name: c.name || '?', version: c.version || c.versionInfo || '',
-          purl: c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || '',
-          supplier: c.supplier?.name || c.publisher || (typeof c.supplier === 'string' ? c.supplier.replace(/^Organization: /, '') : '') || '',
-          license: (c.licenses && (c.licenses[0]?.license?.id || c.licenses[0]?.expression)) || c.licenseConcluded || '',
-          is_direct: directRefs.has(c['bom-ref']) || spdxDirect.has(c.SPDXID) ? 1 : 0,
-        }))
-        const fmt = jx.bomFormat ? 'CycloneDX ' + (jx.specVersion || '') : jx.spdxVersion ? 'SPDX ' + jx.spdxVersion : 'SBOM'
-        await call('POST', '/api/versions/' + res.versionId + '/sboms', {
-          fileName: file.name, format: fmt, depth: 'top_level',
-          generatedAt: jx.metadata?.timestamp || jx.creationInfo?.created || '',
-          components: list, content: text,
-        })
+        await importSbomInto(res.versionId, file, call, t)   // eine Stelle, ein Parser
       }
       setSel({ pid: product.id, vid: res.versionId })
       onClose()
@@ -645,6 +620,7 @@ function DiffTab({ versionLabel }) {
 // ---------- Woher kommt eine transitive Komponente? ----------
 function DependencyPath({ componentId, componentName }) {
   const t = useT()
+  const { product } = useStore()
   const [pfad, setPfad] = useState(undefined)   // undefined = laedt, null = keiner
   React.useEffect(() => {
     if (!componentId) { setPfad(null); return }
@@ -661,14 +637,18 @@ function DependencyPath({ componentId, componentName }) {
     <>
       <div className="fieldlab">{t('Wird hereingezogen über')}</div>
       <div className="deppath">
+        <span className="depnode root" title={t('Euer Produkt')}>{product?.name || t('Produkt')}</span>
         {pfad.map((c, i) => (
           <React.Fragment key={i}>
-            {i > 0 && <span className="deparrow">→</span>}
+            <span className="deparrow">→</span>
             <span className={'depnode' + (i === 0 ? ' first' : '') + (i === pfad.length - 1 ? ' last' : '')}>
               {c.name}{c.version ? ' ' + c.version : ''}
             </span>
           </React.Fragment>
         ))}
+      </div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 11.5 }}>
+        {t('Produkt → direkt eingebunden → … → verwundbare Komponente')}
       </div>
       <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
         {t('Nicht behebbar an')} <b>{componentName}</b> {t('selbst — aktualisiert werden muss die direkte Abhängigkeit')} <b>{direkt.name}</b>.

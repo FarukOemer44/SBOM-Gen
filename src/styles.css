@@ -145,3 +145,4 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 .depnode.first { background: rgba(18,152,255,0.09); color: #1298ff; font-weight: 600; }
 .depnode.last { background: #FEF2F2; color: #DC2626; font-weight: 600; }
 .deparrow { color: #C2CCD8; font-size: 12px; }
+.depnode.root { background: #EDF2FA; color: #0B1928; font-weight: 600; }

@@ -29,12 +29,11 @@ an empty one and you can walk through the flow below yourself.
 1. **Create a product.** Click *Neues Produkt anlegen*, e.g. `ACME IoT Gateway`, version `2.4.0`.
 2. **Import the SBOM.** Either attach it right in the product dialog, or open the *SBOMs* tab and
    import [`sboms/acme-iot-gateway.cdx.json`](sboms/acme-iot-gateway.cdx.json) from this repository.
-   → 732 components land in the inventory, the original file is archived. A version can hold
+   → 951 components land in the inventory, the original file is archived. A version can hold
    several SBOMs — one per artifact, say backend and firmware — and they all feed one inventory.
 3. **Run the scan.** Click *CVE-Abgleich (OSV)*. Takes about 15–20 seconds.
-   → 337 findings, roughly 59 critical / 130 high / 123 medium / 25 low. 319 of them arrive with
-   a CVE number and a concrete fixed version, all 337 with links to the advisory, the NVD entry
-   and the project.
+   → around 375 findings. Most arrive with a CVE number and a concrete fixed version, all of them
+   with links to the advisory, the NVD entry and the project.
 4. **Triage a finding.** Open any row in the *Findings* tab. The drawer shows the CVE number, the
    weakness class, which versions fix it and where the advisory lives — click a version to adopt it
    as the remediation target. **Everything saves as you go**: selections immediately, free text after
@@ -84,8 +83,8 @@ socket.io-client 2.3.0 → engine.io-client 3.4.4 → xmlhttprequest-ssl 1.5.5
 ```
 
 The finding cannot be fixed on the broken package; the direct dependency to update is
-`socket.io-client`. In the bundled example 18 transitive components carry findings, and they trace
-back to a handful of direct ones — updating `socket.io` alone clears several at once.
+`socket.io-client`. In the bundled example 38 transitive components carry findings and every one of them resolves to
+a direct dependency — updating `socket.io` alone clears several at once.
 
 ### One responsible person, not 238 assignments
 
@@ -140,8 +139,8 @@ Two snapshots of the same fictitious product, one release apart:
 
 | File | Components | Findings | Story |
 |---|---|---|---|
-| `sboms/acme-iot-gateway.cdx.json` | 732 | 337 (59 critical) | the legacy state |
-| `sboms/acme-iot-gateway-2.5.0.cdx.json` | 740 | 238 (16 critical) | after a maintenance round |
+| `sboms/acme-iot-gateway.cdx.json` | 951 | 375 | the legacy state |
+| `sboms/acme-iot-gateway-2.5.0.cdx.json` | 980 | 287 | after a maintenance round |
 
 Between them: 63 packages upgraded, 21 dropped (including `vm2`, which alone carried 43 findings),
 29 added (`undici`, `pino` and their dependencies). That is what the *Changes* tab shows, and the
