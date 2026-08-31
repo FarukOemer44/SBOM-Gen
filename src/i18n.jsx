@@ -192,9 +192,6 @@ const EN = {
   'gegen': 'vs',
   'Der eigene Unterstützungszeitraum ist zu kürzen oder ein Ersatz einzuplanen.':
     'The product support period has to be shortened, or a replacement planned.',
-  'Sicherheitsupdates bis': 'Security updates until',
-  '(Monat und Jahr)': '(month and year)',
-  'kürzer als fünf Jahre — nur mit Begründung zulässig': 'shorter than five years — allowed only with justification',
   'Name': 'Name',
   'Paket-Kennung (purl)': 'Package ID (purl)',
   'z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor':
@@ -299,10 +296,6 @@ const EN = {
   'Ja — der Unterstützungszeitraum des Lieferanten ist zu berücksichtigen':
     'Yes — the supplier’s support period has to be taken into account',
   'Nein': 'No',
-  'Inverkehrbringen am': 'Placed on the market on',
-  '(für die Fünfjahresprüfung)': '(for the five-year check)',
-  'Die Prüfung des Zeitraums erfordert das Datum des Inverkehrbringens':
-    'Checking the period requires the market-placement date',
   'Verantwortlichen entfernen? Gilt für alle Funde dieses Produkts.': 'Remove the owner? This applies to every finding of this product.',
   'Version {v} löschen? Komponenten, SBOMs und Funde dieser Version werden mit gelöscht.':
     'Delete version {v}? Its components, SBOMs and findings are deleted with it.',

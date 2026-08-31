@@ -965,12 +965,8 @@ function OwnerPicker() {
   const { product, call, reloadProducts } = useStore()
   const [open, setOpen] = useState(false)
   const [val, setVal] = useState(product?.owner || '')
-  const [bis, setBis] = useState(product?.support_until || '')
-  const [pom, setPom] = useState(product?.placed_on_market || '')
   const ref = useRef(null)
   React.useEffect(() => { setVal(product?.owner || '') }, [product?.owner])
-  React.useEffect(() => { setBis(product?.support_until || '') }, [product?.support_until])
-  React.useEffect(() => { setPom(product?.placed_on_market || '') }, [product?.placed_on_market])
   React.useEffect(() => {
     if (!open) return
     const away = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -979,13 +975,13 @@ function OwnerPicker() {
   }, [open])
 
   const save = async () => {
-    await call('PATCH', '/api/products/' + product.id, { owner: val.trim(), support_until: bis, placed_on_market: pom })
+    await call('PATCH', '/api/products/' + product.id, { owner: val.trim() })
     await reloadProducts()
     setOpen(false)
   }
-  // Art. 13 Abs. 8: mindestens fuenf Jahre AB INVERKEHRBRINGEN — nicht ab heute,
-  // sonst wandert die Warnung mit dem Kalender (Pruefbericht S12).
-  const jahreBis = bis && pom ? (new Date(bis + '-01') - new Date(pom)) / (365.25 * 24 * 3600 * 1000) : null
+  // Unterstuetzungszeitraum und Inverkehrbringen sind Stammdaten des Produktmoduls
+  // (Art. 13 Abs. 19). Hier werden sie nur gelesen — fuer den Vergleich mit dem
+  // Unterstuetzungsende einer Kernkomponente (Art. 13 Abs. 8).
   const initials = (product?.owner || '').split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
@@ -1004,18 +1000,6 @@ function OwnerPicker() {
           <div className="fieldlab" style={{ marginTop: 0 }}>{t('Verantwortlich')}</div>
           <input className="field" value={val} autoFocus placeholder={t('Name')}
             onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
-
-          <div className="fieldlab">{t('Inverkehrbringen am')} <span className="fund">{t('(für die Fünfjahresprüfung)')}</span></div>
-          <input type="date" className="field" value={pom} onChange={e => setPom(e.target.value)} />
-
-          <div className="fieldlab">{t('Sicherheitsupdates bis')} <span className="fund">{t('(Monat und Jahr)')}</span></div>
-          <input type="month" className="field" value={bis} onChange={e => setBis(e.target.value)} />
-          {jahreBis !== null && jahreBis < 5 && (
-            <div style={{ marginTop: 6 }}><Pill kind="amber">{t('kürzer als fünf Jahre — nur mit Begründung zulässig')}</Pill></div>
-          )}
-          {bis && !pom && (
-            <div className="muted" style={{ marginTop: 6 }}>{t('Die Prüfung des Zeitraums erfordert das Datum des Inverkehrbringens')}</div>
-          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
             {product?.owner && <button className="hb sm" style={{ marginRight: 'auto' }} onClick={() => { if (!confirm(t('Verantwortlichen entfernen? Gilt für alle Funde dieses Produkts.'))) return; setVal(''); call('PATCH', '/api/products/' + product.id, { owner: '' }).then(reloadProducts).then(() => setOpen(false)) }}>{t('Entfernen')}</button>}
             <button className="ab sm" onClick={save}>{t('Übernehmen')}</button>
