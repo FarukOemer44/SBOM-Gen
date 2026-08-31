@@ -68,6 +68,25 @@ product's exposure to *that* vulnerability, so there is deliberately no bulk act
 many findings at once — a blanket "not affected" with one shared justification documents nothing and
 would not survive scrutiny.
 
+### Where a transitive component comes from
+
+Art. 3(39) defines an SBOM as a record of the details **and the supply-chain relationships** of the
+components, and both formats carry them: CycloneDX in `dependencies`, SPDX in `relationships`. The
+import stores them in `component_edges`, and `GET /api/components/:id/path` walks back from a
+component to the product root.
+
+That matters for the findings you cannot act on directly. `xmlhttprequest-ssl` carries two critical
+vulnerabilities and appears nowhere in the project's `package.json` — there is nothing to upgrade.
+The drawer shows why:
+
+```
+socket.io-client 2.3.0 → engine.io-client 3.4.4 → xmlhttprequest-ssl 1.5.5
+```
+
+The finding cannot be fixed on the broken package; the direct dependency to update is
+`socket.io-client`. In the bundled example 18 transitive components carry findings, and they trace
+back to a handful of direct ones — updating `socket.io` alone clears several at once.
+
 ### One responsible person, not 238 assignments
 
 The owner sits next to the version selector and applies to the whole product. Every finding
@@ -344,6 +363,7 @@ Without that, upgrading `lodash@4.17.20` to `4.17.21` would read as "removed + a
 | `GET` | `/api/versions/:id/diff` | comparison against the previous version |
 | `POST` | `/api/versions/:id/components` | add a component (mainly hardware) |
 | `PATCH` `DELETE` | `/api/components/:id` | update / delete |
+| `GET` | `/api/components/:id/path` | dependency path from the product root to this component |
 | `POST` | `/api/versions/:id/sboms` | import an SBOM |
 | `PATCH` | `/api/sboms/:id` | depth |
 | `GET` | `/api/sboms/:id/download` | original JSON |

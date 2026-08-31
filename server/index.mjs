@@ -34,6 +34,18 @@ db.exec(`
     source TEXT DEFAULT 'manuell',                  -- manuell | sbom_import
     created_at TEXT NOT NULL
   );
+  -- Lieferkettenbeziehungen: welche Komponente zieht welche herein.
+  -- Art. 3 Nr. 39 definiert die SBOM als Aufzeichnung der Einzelheiten UND der
+  -- Lieferkettenbeziehungen; CycloneDX liefert sie in "dependencies", SPDX in
+  -- "relationships". Ohne sie ist ein transitiver Fund nicht handhabbar.
+  CREATE TABLE IF NOT EXISTS component_edges (
+    version_id TEXT NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
+    parent_ref TEXT NOT NULL,        -- '' = die Produktwurzel
+    child_ref  TEXT NOT NULL,
+    PRIMARY KEY (version_id, parent_ref, child_ref)
+  );
+  CREATE INDEX IF NOT EXISTS idx_edges_child ON component_edges(version_id, child_ref);
+
   CREATE TABLE IF NOT EXISTS sboms (
     id TEXT PRIMARY KEY, version_id TEXT NOT NULL REFERENCES versions(id) ON DELETE CASCADE,
     file_name TEXT NOT NULL, format TEXT DEFAULT '',           -- Art. 13 Abs. 24: Format offen
@@ -166,6 +178,11 @@ app.post('/api/products/:id/versions', (req, res) => {
       copied++
     }
     if (mode === 'unchanged') {
+      // Unveraenderte Zusammensetzung: der Abhaengigkeitsbaum gilt weiter.
+      const es = db.prepare('SELECT parent_ref, child_ref FROM component_edges WHERE version_id = ?').all(copyFrom)
+      const insE = db.prepare('INSERT OR IGNORE INTO component_edges (version_id, parent_ref, child_ref) VALUES (?, ?, ?)')
+      db.transaction(list => { for (const e of list) insE.run(vid, e.parent_ref, e.child_ref) })(es)
+
       // Denselben SBOM-Stand auch fuer die neue Version dokumentieren.
       const sb = db.prepare('SELECT * FROM sboms WHERE version_id = ? ORDER BY imported_at DESC LIMIT 1').get(copyFrom)
       if (sb) {
@@ -244,7 +261,7 @@ app.delete('/api/components/:id', (req, res) => {
 
 // ---------- SBOM-Import (Anhang I Teil II Nr. 1) ----------
 app.post('/api/versions/:id/sboms', (req, res) => {
-  const { fileName, format, depth = 'top_level', generatedAt = '', components = [], content } = req.body
+  const { fileName, format, depth = 'top_level', generatedAt = '', components = [], edges = [], content } = req.body
   const vid = req.params.id
   if (!content) return res.status(400).json({ error: 'Inhalt fehlt' })
   db.prepare(`INSERT INTO sboms (id, version_id, file_name, format, depth, generated_at, imported_at, component_count, content)
@@ -265,7 +282,13 @@ app.post('/api/versions/:id/sboms', (req, res) => {
                          direct || match.is_direct, 'sbom_import', match.id); updated++ }
     else { ins.run(uid(), vid, c.name, c.version || '', c.supplier || '', c.purl || '', c.license || '', direct, now()); added++ }
   }
-  audit('sbom.import', (fileName || '') + ' · +' + added + ' / ~' + updated)
+  // Beziehungen ersetzen: eine neue SBOM beschreibt den Baum vollstaendig neu.
+  if (edges.length) {
+    db.prepare('DELETE FROM component_edges WHERE version_id = ?').run(vid)
+    const insE = db.prepare('INSERT OR IGNORE INTO component_edges (version_id, parent_ref, child_ref) VALUES (?, ?, ?)')
+    db.transaction(list => { for (const e of list) insE.run(vid, e.parent || '', e.child) })(edges)
+  }
+  audit('sbom.import', (fileName || '') + ' · +' + added + ' / ~' + updated + ' · ' + edges.length + ' Beziehungen')
   res.json({ ...versionData(vid), imported: { added, updated } })
 })
 
@@ -462,6 +485,46 @@ app.patch('/api/findings/:id', (req, res) => {
       now(), req.params.id)
   audit('finding.update', cur.vuln_id)
   res.json(versionData(cur.version_id))
+})
+
+// Weg von der Produktwurzel zu einer Komponente — die Handlungsanweisung bei
+// transitiven Funden: nicht das kaputte Paket anfassen, sondern das direkte,
+// das es hereinzieht.
+app.get('/api/components/:id/path', (req, res) => {
+  const c = db.prepare('SELECT * FROM components WHERE id = ?').get(req.params.id)
+  if (!c) return res.status(404).json({ error: 'Komponente nicht gefunden' })
+  const key = x => (x.purl || x.name)
+  const edges = db.prepare('SELECT parent_ref, child_ref FROM component_edges WHERE version_id = ?').all(c.version_id)
+  if (!edges.length) return res.json({ paths: [], hint: 'keine Beziehungen gespeichert' })
+
+  const eltern = new Map()
+  for (const e of edges) {
+    if (!eltern.has(e.child_ref)) eltern.set(e.child_ref, [])
+    eltern.get(e.child_ref).push(e.parent_ref)
+  }
+  // Rueckwaerts von der Komponente zur Wurzel ('') laufen, Breitensuche = kuerzester Weg
+  const start = key(c)
+  const gesehen = new Set([start])
+  let queue = [[start]]
+  let gefunden = null
+  for (let tiefe = 0; tiefe < 30 && queue.length && !gefunden; tiefe++) {
+    const next = []
+    for (const pfad of queue) {
+      for (const p of eltern.get(pfad[0]) || []) {
+        if (p === '') { gefunden = pfad; break }
+        if (gesehen.has(p)) continue
+        gesehen.add(p); next.push([p, ...pfad])
+      }
+      if (gefunden) break
+    }
+    queue = next
+  }
+  if (!gefunden) return res.json({ paths: [], hint: 'kein Weg zur Wurzel gefunden' })
+
+  // Auf die gespeicherten Komponenten abbilden (Name + Version + direkt?)
+  const alle = db.prepare('SELECT id, name, version, purl, is_direct FROM components WHERE version_id = ?').all(c.version_id)
+  const nachKey = new Map(alle.map(x => [key(x), x]))
+  res.json({ paths: [gefunden.map(k => nachKey.get(k) || { name: k })] })
 })
 
 app.get('/api/audit', (_req, res) =>

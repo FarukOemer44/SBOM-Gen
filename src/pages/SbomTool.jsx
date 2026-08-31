@@ -53,6 +53,30 @@ async function importSbomInto(versionId, file, call, t) {
   if (!raw.length) throw new Error(t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.'))
   const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
   const directRefs = new Set((jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || []))
+
+  // Schluessel je Komponente: purl, sonst Name — muss zur Server-Logik passen.
+  const keyOf = c => c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || c.name
+  const refToKey = new Map(raw.map(c => [c['bom-ref'] ?? c.SPDXID, keyOf(c)]))
+
+  // Lieferkettenbeziehungen (Art. 3 Nr. 39): CycloneDX "dependencies",
+  // SPDX "relationships" mit DEPENDS_ON. Die Wurzel wird als '' abgelegt.
+  const edges = []
+  for (const d of jx.dependencies || []) {
+    const parent = d.ref === rootRef ? '' : refToKey.get(d.ref)
+    if (parent === undefined) continue
+    for (const ch of d.dependsOn || []) {
+      const child = refToKey.get(ch)
+      if (child && child !== parent) edges.push({ parent, child })
+    }
+  }
+  for (const r of jx.relationships || []) {
+    if (r.relationshipType !== 'DEPENDS_ON') continue
+    const isRoot = r.spdxElementId === (jx.documentDescribes?.[0] || 'SPDXRef-DOCUMENT')
+    const parent = isRoot ? '' : refToKey.get(r.spdxElementId)
+    const child = refToKey.get(r.relatedSpdxElement)
+    if (parent !== undefined && child && child !== parent) edges.push({ parent, child })
+  }
+
   const list = raw.map(c => ({
     name: c.name || '?', version: c.version || c.versionInfo || '',
     purl: c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || '',
@@ -64,7 +88,7 @@ async function importSbomInto(versionId, file, call, t) {
   return call('POST', '/api/versions/' + versionId + '/sboms', {
     fileName: file.name, format: fmt, depth: 'top_level',
     generatedAt: jx.metadata?.timestamp || jx.creationInfo?.created || '',
-    components: list, content: text,
+    components: list, edges, content: text,
   })
 }
 
@@ -422,6 +446,8 @@ function FindingDrawer({ finding, onClose }) {
               </div>)
         : <span className="muted">{t('Keine Versionsangabe im Advisory.')}</span>}
 
+      <DependencyPath componentId={f.component_id} componentName={f.component_name} />
+
       {f.refs_json && (() => {
         let refs = []
         try { refs = JSON.parse(f.refs_json) } catch { /* nichts anzeigen */ }
@@ -611,6 +637,41 @@ function DiffTab({ versionLabel }) {
               )} />
           </tbody>
         </table>
+      </div>
+    </>
+  )
+}
+
+// ---------- Woher kommt eine transitive Komponente? ----------
+function DependencyPath({ componentId, componentName }) {
+  const t = useT()
+  const [pfad, setPfad] = useState(undefined)   // undefined = laedt, null = keiner
+  React.useEffect(() => {
+    if (!componentId) { setPfad(null); return }
+    setPfad(undefined)
+    fetch('/api/components/' + componentId + '/path')
+      .then(r => r.json())
+      .then(d => setPfad(d.paths?.[0] || null))
+      .catch(() => setPfad(null))
+  }, [componentId])
+
+  if (pfad === undefined || pfad === null || pfad.length < 2) return null
+  const direkt = pfad[0]
+  return (
+    <>
+      <div className="fieldlab">{t('Wird hereingezogen über')}</div>
+      <div className="deppath">
+        {pfad.map((c, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="deparrow">→</span>}
+            <span className={'depnode' + (i === 0 ? ' first' : '') + (i === pfad.length - 1 ? ' last' : '')}>
+              {c.name}{c.version ? ' ' + c.version : ''}
+            </span>
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
+        {t('Nicht behebbar an')} <b>{componentName}</b> {t('selbst — aktualisiert werden muss die direkte Abhängigkeit')} <b>{direkt.name}</b>.
       </div>
     </>
   )
@@ -858,45 +919,16 @@ export default function SbomTool() {
   const lastScan = data?.scans?.[0]
 
   // ---------- SBOM-Import: Datei clientseitig lesen (CycloneDX/SPDX-JSON), Server speichert + übernimmt Komponenten
-  const importSbom = (file) => {
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const jx = JSON.parse(reader.result)
-        const raw = jx.components || jx.packages || []
-        // Direkte Abhaengigkeiten aus dem Abhaengigkeitsgraph (CycloneDX) bzw. den
-        // SPDX-Relationships bestimmen — nur fuer sie ist die Sorgfaltspruefung sinnvoll.
-        const rootRef = jx.metadata?.component?.['bom-ref'] || jx.metadata?.component?.purl
-        const directRefs = new Set(
-          (jx.dependencies || []).filter(d => d.ref === rootRef).flatMap(d => d.dependsOn || [])
-        )
-        const spdxDirect = new Set(
-          (jx.relationships || []).filter(r => r.relationshipType === 'DEPENDS_ON'
-            && r.spdxElementId === (jx.documentDescribes?.[0] || 'SPDXRef-DOCUMENT'))
-            .map(r => r.relatedSpdxElement)
-        )
-        const list = raw.map(c => ({
-          name: c.name || '?', version: c.version || c.versionInfo || '',
-          purl: c.purl || (c.externalRefs || []).find(r => r.referenceType === 'purl')?.referenceLocator || '',
-          supplier: c.supplier?.name || c.publisher || (typeof c.supplier === 'string' ? c.supplier.replace(/^Organization: /, '') : '') || '',
-          license: (c.licenses && (c.licenses[0]?.license?.id || c.licenses[0]?.expression)) || c.licenseConcluded || '',
-          is_direct: directRefs.has(c['bom-ref']) || spdxDirect.has(c.SPDXID) ? 1 : 0,
-        }))
-        if (!list.length) { setNotice({ err: true, msg: t('Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.') }); return }
-        const fmt = jx.bomFormat ? 'CycloneDX ' + (jx.specVersion || '') : jx.spdxVersion ? 'SPDX ' + jx.spdxVersion : 'SBOM'
-        const res = await call('POST', '/api/versions/' + sel.vid + '/sboms', {
-          fileName: file.name, format: fmt, depth: 'top_level',
-          generatedAt: jx.metadata?.timestamp || jx.creationInfo?.created || '',
-          components: list, content: reader.result,
-        })
-        const noPurl = list.filter(c => !c.purl).length
-        setNotice({ err: false, msg: fmt + ' · ' + list.length + ' ' + t('Komponenten importiert') + ' (' + res.imported.added + ' ' + t('neu,') + ' ' + res.imported.updated + ' ' + t('aktualisiert), Original archiviert') + (noPurl ? ' · ' + noPurl + ' ' + t('ohne purl') : '') })
-        setTab('komponenten')
-      } catch (e) { if (!notice) setNotice({ err: true, msg: t('Datei konnte nicht gelesen werden:') + ' ' + e.message }) }
-    }
-    reader.readAsText(file)
+  const importSbom = async (file) => {
+    try {
+      const res = await importSbomInto(sel.vid, file, call, t)
+      const noPurl = res.components.filter(c => !c.purl).length
+      setNotice({ err: false, msg: res.sboms[0].format + ' · ' + res.imported.added + ' ' + t('neu,') + ' '
+        + res.imported.updated + ' ' + t('aktualisiert), Original archiviert')
+        + (noPurl ? ' · ' + noPurl + ' ' + t('ohne purl') : '') })
+      setTab('komponenten')
+    } catch (e) { setNotice({ err: true, msg: String(e.message || e) }) }
   }
-
   const runScan = async () => {
     setScanBanner(null)
     try {

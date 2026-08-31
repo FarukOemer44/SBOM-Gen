@@ -171,6 +171,9 @@ const EN = {
   'Noch keine Komponenten — im Reiter SBOMs eine SBOM importieren.':
     'No components yet — import an SBOM from the SBOMs tab.',
   '(optional — später jederzeit im Reiter SBOMs)': '(optional — you can add it any time from the SBOMs tab)',
+  'Wird hereingezogen über': 'Pulled in via',
+  'Nicht behebbar an': 'Cannot be fixed on',
+  'selbst — aktualisiert werden muss die direkte Abhängigkeit': 'itself — the direct dependency to update is',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
