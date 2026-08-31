@@ -321,6 +321,9 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
     : (k, v) => setDraft(x => ({ ...x, [k]: v }))
   const isHw = f.kind === 'hardware'
   const isOwn = f.kind === 'software_eigen'
+  // Sorgfalt schuldet man beim Auswaehlen: Hardware, Zukauf, direkt eingebundene Pakete.
+  // Eine neue Komponente legt der Server als direkt an. Deckungsgleich mit ddRelevant.
+  const ddGilt = !isOwn && (isHw || f.kind === 'software_zukauf' || (comp ? !!f.is_direct : true))
   const create = async () => { await call('POST', '/api/versions/' + sel.vid + '/components', draft); onClose() }
   const del = async () => { if (confirm(t('Komponente löschen? Zugehörige Funde werden mit entfernt.'))) { await call('DELETE', '/api/components/' + comp.id); onClose() } }
   return (
@@ -344,8 +347,10 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
         <div style={{ flex: 2 }}><div className="fieldlab">{t('Name')}</div><input className="field" value={f.name} onChange={e => set('name', e.target.value, { debounce: true })} /></div>
         <div style={{ flex: 1 }}><div className="fieldlab">{t('Version')}</div><input className="field" value={f.version} onChange={e => set('version', e.target.value, { debounce: true })} /></div>
       </div>
-      <div className="fieldlab">{t('Lieferant')} {isOwn && <span className="fund">{t('— entfällt bei Eigenentwicklung')}</span>}</div>
-      <input className="field" value={f.supplier} onChange={e => set('supplier', e.target.value, { debounce: true })} disabled={isOwn} />
+      {!isOwn && <>
+        <div className="fieldlab">{t('Lieferant')}</div>
+        <input className="field" value={f.supplier} onChange={e => set('supplier', e.target.value, { debounce: true })} />
+      </>}
 
       {(isHw || f.kind === 'software_zukauf') && <>
         <div className="fieldlab">{t('Beschreibung')}</div>
@@ -399,7 +404,7 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
         )}
       </>}
 
-      {!isOwn && <>
+      {ddGilt && <>
         <div className="fieldlab">{t('Sorgfalt')}<HelpDot text={t('Vor dem Einbau einer fremden Komponente ist zu prüfen, dass sie die Sicherheit des Produkts nicht gefährdet — quelloffene Software eingeschlossen. Die Pflicht gilt für Hardware, Zukauf und direkt eingebundene Pakete; transitive Pakete wählt niemand aus.')} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <Toggle on={f.dd_status === 'geprueft'} onChange={v => set('dd_status', v ? 'geprueft' : 'offen')} />
@@ -1118,14 +1123,15 @@ export default function SbomTool() {
   const sevCounts = { KRITISCH: 0, HOCH: 0, MITTEL: 0, NIEDRIG: 0, '—': 0 }
   findings.forEach(f => { sevCounts[f.severity in sevCounts ? f.severity : '—']++ })
   const hw = components.filter(c => c.kind === 'hardware').length
-  const ddPool = components.filter(c => c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct)
+  const ddRelevant = c => c.kind !== 'software_eigen'
+    && (c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct)
+  const ddPool = components.filter(ddRelevant)
   const geprueft = ddPool.filter(c => c.dd_status === 'geprueft').length
   const triaged = findings.filter(f => f.vex_status !== 'under_investigation').length
 
   const compFindings = c => findingsByComp[c.id] || []
   // Sorgfaltspflicht betrifft die Komponenten, die man auswaehlt: Hardware, Zukauf
   // und direkte Abhaengigkeiten. Transitive Pakete waehlt niemand aus.
-  const ddRelevant = c => c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct
   const ddOpen = c => ddRelevant(c) && c.dd_status !== 'geprueft'
   const hasFix = f => !!f.fixed_versions
   const filterCounts = {
@@ -1137,7 +1143,7 @@ export default function SbomTool() {
         .some(f => (f.severity in sevCounts ? f.severity : '—') === k)).length])),
       none: components.filter(c => !(findingsByComp[c.id] || []).length).length,
     },
-    ddOpen: components.filter(c => (c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct) && c.dd_status !== 'geprueft').length,
+    ddOpen: components.filter(ddOpen).length,
     artifact: components.reduce((acc, c) => {
       for (const a of (c.artifact || '').split(', ').map(x => x.trim()).filter(Boolean)) acc[a] = (acc[a] || 0) + 1
       return acc
@@ -1289,7 +1295,7 @@ export default function SbomTool() {
                     </td>
                     <td>
                       {!ddRelevant(c)
-                        ? <span className="muted">{t('nicht selbst ausgewählt')}</span>
+                        ? <span className="muted">—</span>
                         : c.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
                     </td>
                   </tr>

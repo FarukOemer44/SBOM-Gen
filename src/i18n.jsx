@@ -77,7 +77,6 @@ const EN = {
     'e.g. project is actively maintained, publishes security advisories, no open findings at integration time',
   'Geprüft': 'Reviewed',
   'Offen': 'Open',
-  'nicht selbst ausgewählt': 'not selected by you',
   'Kernfunktion': 'core function',
   'Datei': 'File',
   'Format': 'Format',
@@ -199,7 +198,6 @@ const EN = {
   'z. B. Gerät, Baugruppe': 'e.g. device, assembly',
   'z. B. Backend, Firmware': 'e.g. backend, firmware',
   'Name': 'Name',
-  '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   'Paket-Kennung (purl)': 'Package ID (purl)',
   'z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor':
     'e.g. the supplier’s security contact and update commitments are on file',
