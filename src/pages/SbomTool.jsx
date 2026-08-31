@@ -308,7 +308,7 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
   const t = useT()
   const { call, sel, product, data } = useStore()
   const blank = {
-    kind: 'hardware', name: '', version: '', supplier: '', purl: '', cpe: '', license: '',
+    kind: 'hardware', name: '', version: '', supplier: '', purl: '', license: '',
     is_core_function: 0, dd_status: 'offen', dd_note: '',
     artifact: '', supplier_address: '', acquired_at: '', supplier_support_until: '',
   }
@@ -350,13 +350,11 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
         <div className="fieldlab">{t('Paket-Kennung (purl)')}<HelpDot text={t('Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.')} /></div>
         <input className="field" value={f.purl} onChange={e => set('purl', e.target.value, { debounce: true })} placeholder="pkg:npm/lodash@4.17.21" />
       </>}
-      <div className="fieldlab">{t('Hardware-Kennung (cpe)')}<HelpDot text={t('Kennung für Hardware und Firmware aus dem staatlichen Schwachstellenkatalog (NVD). Freiwillig.')} /></div>
-      <input className="field" value={f.cpe} onChange={e => set('cpe', e.target.value, { debounce: true })} placeholder="cpe:2.3:h:…" />
-      <div className="fieldlab">{t('Artefakt')} <span className="fund">{t('— beim Import gesetzt, sonst selbst eintragen')}</span></div>
+      <div className="fieldlab">{t('Artefakt')}<HelpDot text={t('Der Teil des Produkts, in dem diese Komponente steckt — etwa Backend, Firmware oder App. Beim Import wird er aus dem Kopf der SBOM übernommen; steht dort nichts, selbst eintragen.')} /></div>
       <input className="field" value={f.artifact || ''} onChange={e => set('artifact', e.target.value, { debounce: true })}
         placeholder={f.kind === 'hardware' ? t('z. B. Gerät, Baugruppe') : t('z. B. Backend, Firmware')} />
 
-      <div className="fieldlab">{t('Lizenz')} <span className="fund">{t('— wird nur festgehalten, nicht bewertet')}</span></div>
+      <div className="fieldlab">{t('Lizenz')}<HelpDot text={t('Die Lizenz der Komponente, so wie sie in der SBOM steht. Sie wird nur festgehalten und nicht geprüft — Lizenzfragen sind kein Gegenstand der Verordnung.')} /></div>
       <input className="field" value={f.license} onChange={e => set('license', e.target.value, { debounce: true })} />
 
       {!isOwn && f.kind !== 'software_oss' && <>
@@ -1294,7 +1292,7 @@ export default function SbomTool() {
                     <td>
                       <span style={{ display: 'block', fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
                       <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
-                        {c.purl ? pshow(c.purl) : c.cpe || (c.kind === 'hardware' ? '' : t('ohne Paket-Kennung — wird bei der Prüfung übersprungen'))}
+                        {c.purl ? pshow(c.purl) : (c.kind === 'hardware' ? '' : t('ohne Paket-Kennung — wird bei der Prüfung übersprungen'))}
                       </span>
                     </td>
                     <td><Pill kind={kindColor}>{t(kindLabel)}</Pill></td>

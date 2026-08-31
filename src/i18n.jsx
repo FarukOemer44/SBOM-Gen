@@ -194,15 +194,14 @@ const EN = {
   '(Monat und Jahr)': '(month and year)',
   'kürzer als fünf Jahre — nur mit Begründung zulässig': 'shorter than five years — allowed only with justification',
   'Artefakt': 'Artifact',
-  '— beim Import gesetzt, sonst selbst eintragen': '— set on import, otherwise enter it yourself',
+  'Der Teil des Produkts, in dem diese Komponente steckt — etwa Backend, Firmware oder App. Beim Import wird er aus dem Kopf der SBOM übernommen; steht dort nichts, selbst eintragen.': 'The part of the product this component sits in — backend, firmware or app, for example. On import it is taken from the SBOM header; if nothing is stated there, enter it yourself.',
   'z. B. Gerät, Baugruppe': 'e.g. device, assembly',
   'z. B. Backend, Firmware': 'e.g. backend, firmware',
   'ohne Zuordnung': 'unassigned',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   'Paket-Kennung (purl)': 'Package ID (purl)',
-  'Hardware-Kennung (cpe)': 'Hardware ID (cpe)',
-  '— wird nur festgehalten, nicht bewertet': '— recorded only, not assessed',
+  'Die Lizenz der Komponente, so wie sie in der SBOM steht. Sie wird nur festgehalten und nicht geprüft — Lizenzfragen sind kein Gegenstand der Verordnung.': 'The licence of the component exactly as stated in the SBOM. It is recorded only and not assessed — licensing is not a matter the Regulation covers.',
   'z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor':
     'e.g. the supplier’s security contact and update commitments are on file',
   'Komponente löschen? Zugehörige Funde werden mit entfernt.': 'Delete this component? Its findings are removed with it.',
@@ -328,8 +327,6 @@ const EN = {
   // Fragezeichen-Erklärungen (D-037)
   'Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.':
     'The unique ID of the package. The check uses it to find vulnerabilities — without it the component stays unchecked.',
-  'Kennung für Hardware und Firmware aus dem staatlichen Schwachstellenkatalog (NVD). Freiwillig.':
-    'An ID for hardware and firmware from the national vulnerability catalogue (NVD). Optional.',
   'Ist das Produkt durch diese Schwachstelle angreifbar? Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus.':
     'Is the product exposed to this vulnerability? Not every vulnerability in a component affects the product.',
   'Welche Prüfung erfolgte vor dem Einbau der Komponente? Pflicht für alle selbst ausgewählten Komponenten.':
