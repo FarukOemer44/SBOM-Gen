@@ -123,7 +123,10 @@ async function importSbomInto(versionId, file, call, t) {
   // Jede SBOM benennt im Kopf, was sie beschreibt — das ist der Artefaktname.
   const artifact = jx.metadata?.component?.name || jx.name || ''
   return call('POST', '/api/versions/' + versionId + '/sboms', {
-    fileName: file.name, format: fmt, depth: 'top_level', artifact,
+    fileName: file.name, format: fmt, artifact,
+    // Tiefe ableiten statt behaupten: gibt es Kanten unterhalb der Wurzel,
+    // ist der Baum weiter aufgeloest als nur die obersten Abhaengigkeiten.
+    depth: edges.some(e => e.parent !== '') ? 'full' : 'top_level',
     generatedAt: jx.metadata?.timestamp || jx.creationInfo?.created || '',
     components: list, edges, content: text,
   })

@@ -170,6 +170,12 @@ db.transaction(() => {
   if (bereinigt) audit('db.migrate', 'Komponenten-Dubletten bereinigt: ' + bereinigt)
 })()
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_components_purl ON components(version_id, purl) WHERE purl != ''`)
+// 3) sboms.component_count zaehlte die Rohzeilen der Datei und widersprach damit dem
+//    bereinigten Inventar. Nachziehen, wo genau eine SBOM zur Version gehoert.
+db.exec(`UPDATE sboms SET component_count = (
+    SELECT COUNT(*) FROM components c WHERE c.version_id = sboms.version_id AND c.source = 'sbom_import')
+  WHERE (SELECT COUNT(*) FROM sboms s2 WHERE s2.version_id = sboms.version_id) = 1
+    AND component_count > (SELECT COUNT(*) FROM components c WHERE c.version_id = sboms.version_id AND c.source = 'sbom_import')`)
 
 const app = express()
 app.use(express.json({ limit: '25mb' }))
@@ -329,9 +335,13 @@ app.post('/api/versions/:id/sboms', (req, res) => {
     components = [], edges = [], content } = req.body
   const vid = req.params.id
   if (!content) return res.status(400).json({ error: 'Inhalt fehlt' })
+  // Gezaehlt werden VERSCHIEDENE Komponenten, nicht Zeilen der Datei: ein geschachtelter
+  // CycloneDX-Baum nennt dasselbe Paket mehrfach (ms@2.1.3 sechzehnmal), es ist aber ein
+  // Paket. Sonst widerspricht diese Zahl dem Inventar.
+  const distinct = new Set(components.map(c => c.purl || c.name)).size
   db.prepare(`INSERT INTO sboms (id, version_id, file_name, format, depth, generated_at, imported_at, component_count, content)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(uid(), vid, fileName || 'sbom.json', format || 'SBOM', depth, generatedAt, now(), components.length, content)
+    .run(uid(), vid, fileName || 'sbom.json', format || 'SBOM', depth, generatedAt, now(), distinct, content)
   // Software-Einträge ins Komponenteninventar übernehmen (Obermenge, Abschnitt 1.6):
   // Abgleich über purl, sonst Name+Version. Typ/Sorgfalt bestehender Einträge bleiben erhalten.
   const existing = db.prepare('SELECT * FROM components WHERE version_id = ?').all(vid)
