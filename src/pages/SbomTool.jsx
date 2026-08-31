@@ -360,7 +360,10 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
             : isOwn ? t('z. B. Steuerungslogik für die Ventilansteuerung')
               : t('z. B. Bibliothek für die Verschlüsselung der Gerätekommunikation')} />
       </>}
-      {!isHw && !isOwn && <>
+      {/* Nur Open Source: quelloffene Pakete kommen mit purl aus dem SBOM-Import und sind
+          in OSV auffindbar. Eigenentwicklung, Zukauf und Hardware sind das nicht — dort
+          erreichen Schwachstellen den Hersteller über Meldungen des Lieferanten. */}
+      {f.kind === 'software_oss' && <>
         <div className="fieldlab">{t('Paket-Kennung (purl)')}<HelpDot text={t('Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.')} /></div>
         <input className="field" value={f.purl} onChange={e => set('purl', e.target.value, { debounce: true })} placeholder="pkg:npm/lodash@4.17.21" />
       </>}
