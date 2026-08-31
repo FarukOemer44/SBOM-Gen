@@ -214,7 +214,7 @@ function NewProductModal({ onClose }) {
         <span className="muted">{file ? file.name : t('CycloneDX- oder SPDX-JSON')}</span>
       </div>
 
-      {err && <div style={{ marginTop: 12 }}><Pill kind="red">{err}</Pill></div>}
+      {err && <div style={{ marginTop: 12 }}><Pill kind="red">{t(err)}</Pill></div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
         <button className="hb" onClick={onClose}>{t('Abbrechen')}</button>
         <button className="ab" disabled={!name.trim() || busy} onClick={save}>{busy ? t('Bitte warten …') : t('Anlegen')}</button>
@@ -290,7 +290,7 @@ function NewVersionModal({ onClose }) {
         </div>
       )}
 
-      {err && <div style={{ marginTop: 12 }}><Pill kind="red">{err}</Pill></div>}
+      {err && <div style={{ marginTop: 12 }}><Pill kind="red">{t(err)}</Pill></div>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
         <button className="hb" onClick={onClose}>{t('Abbrechen')}</button>
