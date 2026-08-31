@@ -120,8 +120,10 @@ async function importSbomInto(versionId, file, call, t) {
     is_direct: directRefs.has(c['bom-ref']) ? 1 : 0,
   }))
   const fmt = jx.bomFormat ? 'CycloneDX ' + (jx.specVersion || '') : jx.spdxVersion ? 'SPDX ' + jx.spdxVersion : 'SBOM'
+  // Jede SBOM benennt im Kopf, was sie beschreibt — das ist der Artefaktname.
+  const artifact = jx.metadata?.component?.name || jx.name || ''
   return call('POST', '/api/versions/' + versionId + '/sboms', {
-    fileName: file.name, format: fmt, depth: 'top_level',
+    fileName: file.name, format: fmt, depth: 'top_level', artifact,
     generatedAt: jx.metadata?.timestamp || jx.creationInfo?.created || '',
     components: list, edges, content: text,
   })
@@ -343,6 +345,10 @@ function ComponentDrawer({ comp, onClose }) {
       </>}
       <div className="fieldlab">cpe <span className="fund">{t('(für Hardware/Firmware — NVD-Identifikation, optional)')}</span></div>
       <input className="field" value={f.cpe} onChange={e => set('cpe', e.target.value, { debounce: true })} placeholder="cpe:2.3:h:…" />
+      <div className="fieldlab">{t('Artefakt')} <span className="fund">{t('(bei SBOM-Import automatisch, sonst frei)')}</span></div>
+      <input className="field" value={f.artifact || ''} onChange={e => set('artifact', e.target.value, { debounce: true })}
+        placeholder={f.kind === 'hardware' ? t('z. B. Gerät, Baugruppe') : t('z. B. Backend, Firmware')} />
+
       <div className="fieldlab">{t('Lizenz')} <span className="fund">{t('(nur mitgespeichert — keine Lizenzanalyse, D-006)')}</span></div>
       <input className="field" value={f.license} onChange={e => set('license', e.target.value, { debounce: true })} />
 
@@ -793,6 +799,20 @@ function FilterDrawer({ tab, f, set, counts, onClose }) {
           <Chip active={f.compSev === 'none'} count={counts.compSev.none}
             onClick={() => set({ compSev: f.compSev === 'none' ? null : 'none' })}>{t('Ohne Funde')} </Chip>
         </FilterRow>
+        {Object.keys(counts.artifact).length > 0 && (
+          <FilterRow label={t('Artefakt')}>
+            <Chip active={!f.artifact} onClick={() => set({ artifact: null })}>{t('Alle')} </Chip>
+            {Object.entries(counts.artifact).map(([a, n]) => (
+              <Chip key={a} active={f.artifact === a} count={n}
+                onClick={() => set({ artifact: f.artifact === a ? null : a })}>{a} </Chip>
+            ))}
+            {counts.ohneArtefakt > 0 && (
+              <Chip active={f.artifact === '—'} count={counts.ohneArtefakt}
+                onClick={() => set({ artifact: f.artifact === '—' ? null : '—' })}>{t('ohne Zuordnung')} </Chip>
+            )}
+          </FilterRow>
+        )}
+
         <FilterRow label={t('Sorgfalt')}>
           <Chip active={!f.compDd} onClick={() => set({ compDd: false })}>{t('Alle')} </Chip>
           <Chip active={f.compDd} count={counts.ddOpen} disabled={!counts.ddOpen}
@@ -973,7 +993,7 @@ export default function SbomTool() {
   const { products, product, version, sel, setSel, data, call, busy, notice, setNotice, reloadProducts } = useStore()
   const [q, setQ] = useState('')
   const [tab, setTab] = useState('komponenten')
-  const EMPTY_FILTER = { kind: null, compSev: null, compDd: false, compDirect: null, sev: null, vex: null, fix: null }
+  const EMPTY_FILTER = { kind: null, compSev: null, compDd: false, compDirect: null, artifact: null, sev: null, vex: null, fix: null }
   const [filter, setFilterRaw] = useState(EMPTY_FILTER)
   const setFilter = patchObj => setFilterRaw(f => ({ ...f, ...patchObj }))
   const activeFilters = Object.values(filter).filter(v => v !== null && v !== false).length
@@ -1046,6 +1066,11 @@ export default function SbomTool() {
       none: components.filter(c => !(findingsByComp[c.id] || []).length).length,
     },
     ddOpen: components.filter(c => (c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct) && c.dd_status !== 'geprueft').length,
+    artifact: components.reduce((acc, c) => {
+      for (const a of (c.artifact || '').split(', ').map(x => x.trim()).filter(Boolean)) acc[a] = (acc[a] || 0) + 1
+      return acc
+    }, {}),
+    ohneArtefakt: components.filter(c => !(c.artifact || '').trim()).length,
     sev: sevCounts,
     vex: Object.fromEntries(VEX_STATI.map(([v]) => [v, findings.filter(f => f.vex_status === v).length])),
     fixHas: findings.filter(f => !!f.fixed_versions && !f.fixed_versions.startsWith('kein Fix')).length,
@@ -1057,6 +1082,9 @@ export default function SbomTool() {
     .filter(c => !filter.compSev || (filter.compSev === 'none' ? compFindings(c).length === 0
       : compFindings(c).some(f => (f.severity in sevCounts ? f.severity : '—') === filter.compSev)))
     .filter(c => !filter.compDd || ddOpen(c))
+    .filter(c => !filter.artifact || (filter.artifact === '—'
+      ? !(c.artifact || '').trim()
+      : (c.artifact || '').split(', ').includes(filter.artifact)))
     .filter(c => !q || (c.name + ' ' + c.purl + ' ' + c.supplier).toLowerCase().includes(q.toLowerCase()))
   const findRows = findings
     .filter(f => !filter.sev || (f.severity in sevCounts ? f.severity : '—') === filter.sev)

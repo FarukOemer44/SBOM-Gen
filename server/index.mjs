@@ -96,6 +96,11 @@ for (const [col, ddl] of [
   // Art. 13 Abs. 8: Unterstuetzungszeitraeume integrierter Drittkomponenten
   // mit Kernfunktionen sind ein Abwaegungsfaktor.
   ['supplier_support_until', "TEXT DEFAULT ''"],
+  // Aus welchem Artefakt stammt die Komponente? Bei SBOM-Import aus
+  // metadata.component.name; bei Hardware traegt der Nutzer es ein.
+  // Mehrere Artefakte werden mit Komma gefuehrt — dieselbe Bibliothek kann
+  // in Backend und Firmware stecken.
+  ['artifact', "TEXT DEFAULT ''"],
 ]) {
   const has = db.prepare('PRAGMA table_info(components)').all().some(c => c.name === col)
   if (!has) db.exec(`ALTER TABLE components ADD COLUMN ${col} ${ddl}`)
@@ -185,11 +190,11 @@ app.post('/api/products/:id/versions', (req, res) => {
     const comps = mode === 'new_sbom' ? all.filter(c => c.kind === 'hardware') : all
     const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
       is_direct, is_core_function, dd_status, dd_note, supplier_address, acquired_at, supplier_support_until,
-      source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      artifact, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     for (const c of comps) {
       ins.run(uid(), vid, c.kind, c.name, c.version, c.supplier, c.purl, c.cpe, c.license,
         c.is_direct, c.is_core_function, c.dd_status, c.dd_note,
-        c.supplier_address, c.acquired_at, c.supplier_support_until, c.source, now())
+        c.supplier_address, c.acquired_at, c.supplier_support_until, c.artifact, c.source, now())
       copied++
     }
     if (mode === 'unchanged') {
@@ -246,11 +251,11 @@ app.post('/api/versions/:id/components', (req, res) => {
   const c = req.body
   if (!c.name?.trim()) return res.status(400).json({ error: 'Name fehlt' })
   db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-    is_direct, is_core_function, dd_status, dd_note, source, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'manuell', ?)`)
+    is_direct, is_core_function, dd_status, dd_note, artifact, source, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'manuell', ?)`)
     .run(uid(), req.params.id, c.kind || 'software_oss', c.name.trim(), c.version || '', c.supplier || '',
       c.purl || '', c.cpe || '', c.license || '', c.is_core_function ? 1 : 0,
-      c.dd_status || 'offen', c.dd_note || '', now())
+      c.dd_status || 'offen', c.dd_note || '', c.artifact || '', now())
   audit('component.create', c.name)
   res.json(versionData(req.params.id))
 })
@@ -261,10 +266,10 @@ app.patch('/api/components/:id', (req, res) => {
   const c = { ...cur, ...req.body }
   db.prepare(`UPDATE components SET kind=?, name=?, version=?, supplier=?, purl=?, cpe=?, license=?,
     is_core_function=?, dd_status=?, dd_note=?,
-    supplier_address=?, acquired_at=?, supplier_support_until=? WHERE id=?`)
+    supplier_address=?, acquired_at=?, supplier_support_until=?, artifact=? WHERE id=?`)
     .run(c.kind, c.name, c.version, c.supplier, c.purl, c.cpe, c.license,
       c.is_core_function ? 1 : 0, c.dd_status, c.dd_note,
-      c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '', req.params.id)
+      c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '', c.artifact || '', req.params.id)
   audit('component.update', c.name)
   res.json(versionData(cur.version_id))
 })
@@ -279,7 +284,8 @@ app.delete('/api/components/:id', (req, res) => {
 
 // ---------- SBOM-Import (Anhang I Teil II Nr. 1) ----------
 app.post('/api/versions/:id/sboms', (req, res) => {
-  const { fileName, format, depth = 'top_level', generatedAt = '', components = [], edges = [], content } = req.body
+  const { fileName, format, depth = 'top_level', generatedAt = '', artifact = '',
+    components = [], edges = [], content } = req.body
   const vid = req.params.id
   if (!content) return res.status(400).json({ error: 'Inhalt fehlt' })
   db.prepare(`INSERT INTO sboms (id, version_id, file_name, format, depth, generated_at, imported_at, component_count, content)
@@ -289,16 +295,24 @@ app.post('/api/versions/:id/sboms', (req, res) => {
   // Abgleich über purl, sonst Name+Version. Typ/Sorgfalt bestehender Einträge bleiben erhalten.
   const existing = db.prepare('SELECT * FROM components WHERE version_id = ?').all(vid)
   const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-    is_direct, is_core_function, dd_status, dd_note, source, created_at)
-    VALUES (?, ?, 'software_oss', ?, ?, ?, ?, '', ?, ?, 0, 'offen', '', 'sbom_import', ?)`)
-  const upd = db.prepare('UPDATE components SET version=?, supplier=?, license=?, is_direct=?, source=? WHERE id=?')
+    is_direct, is_core_function, dd_status, dd_note, artifact, source, created_at)
+    VALUES (?, ?, 'software_oss', ?, ?, ?, ?, '', ?, ?, 0, 'offen', '', ?, 'sbom_import', ?)`)
+  const upd = db.prepare('UPDATE components SET version=?, supplier=?, license=?, is_direct=?, artifact=?, source=? WHERE id=?')
+  // Steckt dieselbe Komponente in mehreren Artefakten, werden die Namen gesammelt.
+  const mitArtefakt = (bisher, neu) => {
+    if (!neu) return bisher || ''
+    const liste = (bisher || '').split(', ').map(x => x.trim()).filter(Boolean)
+    if (!liste.includes(neu)) liste.push(neu)
+    return liste.join(', ')
+  }
   let added = 0, updated = 0
   for (const c of components) {
     const direct = c.is_direct ? 1 : 0
     const match = existing.find(e => (c.purl && e.purl === c.purl) || (!c.purl && e.name === c.name))
     if (match) { upd.run(c.version || match.version, c.supplier || match.supplier, c.license || match.license,
-                         direct || match.is_direct, 'sbom_import', match.id); updated++ }
-    else { ins.run(uid(), vid, c.name, c.version || '', c.supplier || '', c.purl || '', c.license || '', direct, now()); added++ }
+                         direct || match.is_direct, mitArtefakt(match.artifact, artifact), 'sbom_import', match.id); updated++ }
+    else { ins.run(uid(), vid, c.name, c.version || '', c.supplier || '', c.purl || '', c.license || '', direct,
+                   artifact, now()); added++ }
   }
   // Beziehungen ersetzen: eine neue SBOM beschreibt den Baum vollstaendig neu.
   if (edges.length) {

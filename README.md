@@ -98,6 +98,19 @@ inherits it — the list shows the inherited name in grey — and an individual 
 assigned to someone else in its drawer. ENISA 4.13 asks for *an* owner for triage and tracking,
 which is one person for a product, not a field to fill in on every row.
 
+### Several SBOMs, one inventory
+
+A product made of a backend, a firmware image and a mobile app has three builds and three SBOMs.
+All of them can be imported into the same version: each file is archived separately, and the
+components merge into one inventory — which is what the vulnerability matching needs, and it keeps
+the same CVE in two artifacts from being assessed twice.
+
+Every SBOM names its own subject in `metadata.component`, so the artifact label is taken from the
+file rather than typed: components imported from `backend.cdx.json` are tagged `acme-backend`,
+those from the firmware build `panel-firmware`. A library present in both carries both labels. The
+*Artifact* block in the filter then gives you the per-artifact view without splitting the screen.
+Hardware entered by hand has no SBOM to take a name from, so that field is free text there.
+
 ### Supplier records and support periods
 
 For hardware and purchased software the drawer carries what the regulation asks an economic
