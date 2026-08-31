@@ -18,6 +18,7 @@ async function j(method, url, body) {
 // Produkte/Versionen/Komponenten/SBOMs/Funde liegen relational getrennt in der DB;
 // nur die aktuelle Auswahl (Produkt + Version) ist lokaler UI-Zustand.
 export function StoreProvider({ children }) {
+  const t = useT()
   const [products, setProducts] = useState(null)
   const [dbStatus, setDbStatus] = useState('lädt')
   const [sel, setSelRaw] = useState(() => {
@@ -60,7 +61,10 @@ export function StoreProvider({ children }) {
   }, [sel.vid])
 
   if (dbStatus === 'fehler' && !products) return <DbError onRetry={() => { setDbStatus('lädt'); loadProducts() }} />
-  if (!products) return null
+  if (!products) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: '#8B95A3' }}>● {t('verbinde …')}</div>
+  )
 
   const product = products.find(p => p.id === sel.pid) || null
   const version = product?.versions.find(v => v.id === sel.vid) || null

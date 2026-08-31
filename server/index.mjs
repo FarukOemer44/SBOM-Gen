@@ -553,7 +553,9 @@ app.post('/api/versions/:id/scan', async (req, res) => {
     for (const h of hits) {
       const rec = details[h.vulnId]
       const { label, score, vector } = rec ? sevOf(rec) : { label: '—', score: null, vector: '' }
-      const summary = rec?.summary || 'osv.dev/vulnerability/' + h.vulnId
+      // Fehlt die Zusammenfassung, bleibt das Feld leer — eine URL ist keine Beschreibung
+      // und landete sonst auch im Advisory-Entwurf (Pruefbericht S2).
+      const summary = rec?.summary || ''
       const aliases = (rec?.aliases || []).join(', ')
       const cwe = (rec?.database_specific?.cwe_ids || []).join(', ')
       const published = rec?.published || ''

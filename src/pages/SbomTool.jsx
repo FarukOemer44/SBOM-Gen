@@ -175,6 +175,17 @@ function VexPill({ v }) {
   return <Pill kind={kind}>{t(label)}</Pill>
 }
 
+// Wie alt ist ein Zeitpunkt? Ein Datum allein verraet nicht, ob der Stand veraltet ist.
+function alterText(iso, t) {
+  if (!iso) return ''
+  const tage = Math.floor((Date.now() - new Date(iso)) / 86400000)
+  if (isNaN(tage) || tage < 0) return ''
+  if (tage === 0) return t('heute')
+  if (tage === 1) return t('gestern')
+  if (tage < 60) return t('vor {n} Tagen').replace('{n}', tage)
+  return t('vor {n} Monaten').replace('{n}', Math.round(tage / 30))
+}
+
 const toLocal = iso => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
 const fromLocal = v => v ? new Date(v).toISOString() : ''
 
@@ -557,6 +568,9 @@ function FindingDrawer({ finding, onClose }) {
                   : <span key={v} className={'chip' + (v === empfohlen ? ' blue' : '')}>{f.component_name} {v}</span>
               ))}
               {f.fix_version && <Pill kind="blue">{t('Zielversion:')} {f.fix_version}</Pill>}
+              {f.fix_version && !f.fixed_versions.split(', ').includes(f.fix_version) && (
+                <Pill kind="amber">{t('Die Meldung nennt diese Version nicht mehr')}</Pill>
+              )}
             </div>
           : <span className="muted">{t('Die Meldung nennt keine behebende Version.')}</span>}
 
@@ -609,9 +623,15 @@ function FindingDrawer({ finding, onClose }) {
             <input type="date" className="field" style={{ flex: 1 }} value={f.accept_until} onChange={e => set('accept_until', e.target.value)} title={t('Befristung')} />
           )}
         </div>
-        {(f.decision === 'accept' || f.decision === 'defer') && (
+        {(f.decision === 'accept' || f.decision === 'defer') && <>
           <textarea className="field" rows={2} style={{ marginTop: 8 }} value={f.decision_rationale}
             placeholder={t('Begründung der Entscheidung')} onChange={e => set('decision_rationale', e.target.value, { debounce: true })} />
+          {!f.decision_rationale.trim() && (
+            <div style={{ marginTop: 6 }}><Pill kind="amber">{t('Die Entscheidung braucht eine Begründung')}</Pill></div>
+          )}
+        </>}
+        {f.decision === 'accept' && !f.accept_until && (
+          <div style={{ marginTop: 6 }}><Pill kind="amber">{t('Ein akzeptiertes Risiko braucht eine Befristung')}</Pill></div>
         )}
       </>}
 
@@ -1104,20 +1124,25 @@ export default function SbomTool() {
   const [filter, setFilterRaw] = useState(EMPTY_FILTER)
   const setFilter = patchObj => setFilterRaw(f => ({ ...f, ...patchObj }))
   const activeFilters = Object.values(filter).filter(v => v !== null && v !== false).length
+  const zuruecksetzen = () => { setFilterRaw(EMPTY_FILTER); setQ('') }
   const [modal, setModal] = useState(null)        // 'produkt' | 'version'
   const [compOpen, setCompOpen] = useState(null)  // component | 'neu'
   const [findOpen, setFindOpen] = useState(null)
   const [sbomOpen, setSbomOpen] = useState(null)
   const [scanBanner, setScanBanner] = useState(null)
+  const [importiert, setImportiert] = useState(false)
   const fileRef = useRef(null)
 
   const components = data?.components || []
   const sboms = data?.sboms || []
   const findings = data?.findings || []
   const lastScan = data?.scans?.[0]
+  // Kamen nach dem letzten Abgleich Komponenten hinzu, ist die Fundzahl veraltet.
+  const inventarNeuer = !!lastScan && (data?.components || []).some(c => c.created_at > lastScan.ran_at)
 
   // ---------- SBOM-Import: Datei clientseitig lesen (CycloneDX/SPDX-JSON), Server speichert + übernimmt Komponenten
   const importSbom = async (file) => {
+    setImportiert(true)
     try {
       const res = await importSbomInto(sel.vid, file, call, t)
       const noPurl = res.components.filter(c => !c.purl).length
@@ -1127,6 +1152,7 @@ export default function SbomTool() {
         + (noPurl ? ' · ' + noPurl + ' ' + t('ohne Paket-Kennung') : '') })
       setTab('komponenten')
     } catch (e) { setNotice({ err: true, msg: String(e.message || e) }) }
+    finally { setImportiert(false) }
   }
   const runScan = async () => {
     setScanBanner(null)
@@ -1236,7 +1262,10 @@ export default function SbomTool() {
         <button className="hb sm" onClick={() => setModal('version')}>{t('+ Version')}</button>
         <span style={{ flex: 1 }} />
         {scanBanner && <Pill kind="green">{t('Prüfung fertig —')} {scanBanner.scanned} {t('Komponenten geprüft ·')} {scanBanner.added} {t('neue Funde ·')} {scanBanner.updated} {t('aktualisierte Funde')}</Pill>}
-        {!scanBanner && lastScan && <span className="muted">{t('Letzte Prüfung:')} {fmtDT(lastScan.ran_at)} · {lastScan.source} · {lastScan.components_scanned} {t('Komponenten geprüft')}</span>}
+        {!scanBanner && lastScan && <span className="muted">
+          {t('Letzte Prüfung:')} {alterText(lastScan.ran_at, t)} ({fmtDT(lastScan.ran_at)}) · {lastScan.components_scanned} {t('Komponenten geprüft')}
+          {inventarNeuer && <> · <b style={{ color: '#F5A623' }}>{t('Inventar seither geändert')}</b></>}
+        </span>}
         {!scanBanner && !lastScan && <span className="muted">{t('Noch keine Prüfung für diese Version')}</span>}
       </div>
 
@@ -1322,7 +1351,10 @@ export default function SbomTool() {
                 )
               })}
               {!compRows.length && <tr><td colSpan={5} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
-                {components.length ? (q ? t('Keine Treffer für die Suche.') : t('Keine Komponenten für diesen Filter.')) : t('Noch keine Komponenten. Software kommt über den SBOM-Import, Hardware und Zukauf über „+ Komponente“.')}</td></tr>}
+                {components.length
+                  ? <>{q ? t('Keine Treffer für die Suche.') : t('Keine Komponenten für diesen Filter.')}{' '}
+                      <span className="link" onClick={zuruecksetzen}>{t('Zurücksetzen')}</span></>
+                  : t('Noch keine Komponenten. Software kommt über den SBOM-Import, Hardware und Zukauf über „+ Komponente“.')}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1332,7 +1364,8 @@ export default function SbomTool() {
       {tab === 'sboms' && <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
           <span style={{ flex: 1 }} />
-          <button className="ab sm" onClick={() => fileRef.current?.click()} disabled={!version}>{t('SBOM importieren')}</button>
+          <button className="ab sm" onClick={() => fileRef.current?.click()} disabled={!version || importiert}>
+            {importiert ? t('Bitte warten …') : t('SBOM importieren')}</button>
         </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
@@ -1389,7 +1422,10 @@ export default function SbomTool() {
                 </tr>
               ))}
               {!findRows.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
-                {findings.length ? (q ? t('Keine Treffer für die Suche.') : t('Keine Funde für diesen Filter.')) : t('Noch keine Funde. Der Abgleich erfasst Software mit Paket-Kennung, alles Übrige über „+ Fund erfassen“.')}</td></tr>}
+                {findings.length
+                  ? <>{q ? t('Keine Treffer für die Suche.') : t('Keine Funde für diesen Filter.')}{' '}
+                      <span className="link" onClick={zuruecksetzen}>{t('Zurücksetzen')}</span></>
+                  : t('Noch keine Funde. Der Abgleich erfasst Software mit Paket-Kennung, alles Übrige über „+ Fund erfassen“.')}</td></tr>}
             </tbody>
           </table>
         </div>
