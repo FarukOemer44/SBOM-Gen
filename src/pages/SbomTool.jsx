@@ -1262,7 +1262,7 @@ export default function SbomTool() {
         </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
-            <thead><tr><th style={{ width: '28%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Funde')}</th><th>{t('Sorgfalt')}</th></tr></thead>
+            <thead><tr><th style={{ width: '28%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Funde')}</th><th>{t('Sorgfalt')}<HelpDot text={t('Vor dem Einbau einer fremden Komponente ist zu prüfen, dass sie die Sicherheit des Produkts nicht gefährdet — quelloffene Software eingeschlossen. Die Pflicht gilt für Hardware, Zukauf und direkt eingebundene Pakete; transitive Pakete wählt niemand aus.')} /></th></tr></thead>
             <tbody>
               {compRows.map(c => {
                 const fs = findingsByComp[c.id] || []
@@ -1289,7 +1289,7 @@ export default function SbomTool() {
                     </td>
                     <td>
                       {!ddRelevant(c)
-                        ? <span className="muted">{t('entfällt')}</span>
+                        ? <span className="muted">{t('nicht selbst ausgewählt')}</span>
                         : c.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
                     </td>
                   </tr>

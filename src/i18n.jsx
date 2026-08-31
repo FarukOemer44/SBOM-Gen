@@ -77,7 +77,7 @@ const EN = {
     'e.g. project is actively maintained, publishes security advisories, no open findings at integration time',
   'Geprüft': 'Reviewed',
   'Offen': 'Open',
-  'entfällt': 'not applicable',
+  'nicht selbst ausgewählt': 'not selected by you',
   'Kernfunktion': 'core function',
   'Datei': 'File',
   'Format': 'Format',
