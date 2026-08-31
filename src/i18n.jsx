@@ -66,9 +66,9 @@ const EN = {
   'Version': 'Version',
   'Lieferant': 'Supplier',
   'Beschreibung': 'Description',
+  'z. B. Steuerungslogik für die Ventilansteuerung': 'e.g. control logic for the valve actuation',
   'z. B. Touch-Display der Bedieneinheit, 7 Zoll': 'e.g. touch display of the control unit, 7 inch',
   'z. B. Bibliothek für die Verschlüsselung der Gerätekommunikation': 'e.g. library encrypting device communication',
-  'Lizenz': 'License',
   'Schwachstellen': 'Vulnerabilities',
   'Sorgfalt': 'Due diligence',
   'Vor dem Einbau einer fremden Komponente ist zu prüfen, dass sie die Sicherheit des Produkts nicht gefährdet — quelloffene Software eingeschlossen. Die Pflicht gilt für Hardware, Zukauf und direkt eingebundene Pakete; transitive Pakete wählt niemand aus.':
@@ -134,18 +134,18 @@ const EN = {
   'Sicherheitshinweis (Entwurf)': 'Security advisory (draft)',
   'Herunterladen': 'Download',
   'Neu hinzugekommen': 'Newly added',
-  'Komponenten, SBOMs und Funde hängen an der Produktversion. Zuerst ein Produkt mit seiner ersten Version anlegen, danach die SBOM des Builds importieren.':
-    'Components, SBOMs and findings attach to the product version. First create a product with its first version, then import the SBOM from the build.',
+  'Komponenten, SBOMs und Funde werden je Produktversion geführt. Der SBOM-Import ist nach dem Anlegen der ersten Version möglich.':
+    'Components, SBOMs and findings are tracked per product version. The SBOM import becomes available once the first version exists.',
   'aktiv ausgenutzt': 'actively exploited',
   'Ja — verlässliche Nachweise erforderlich': 'Yes — reliable evidence required',
   'Eigene Tests': 'Own testing',
   'Hinweis von außen': 'External notification',
-  'Nachweis: worauf stützt sich die Einstufung?': 'Evidence: what is this assessment based on?',
+  'Nachweis der Einstufung': 'Evidence for this assessment',
   'Version löschen?': 'Delete version?',
   'Gespeichert': 'Saved',
   'Prüfverlauf': 'Check history',
-  'Hier steht jede Prüfung: wann sie lief, wie viele Komponenten geprüft wurden und was sie gefunden hat.':
-    'Every check is listed here: when it ran, how many components were checked and what it found.',
+  'Protokoll aller Prüfungen mit Zeitpunkt, Umfang und Ergebnis.':
+    'Log of every check with time, scope and result.',
   'Zeitpunkt': 'When',
   'Quelle': 'Source',
   'Neu': 'New',
@@ -166,7 +166,7 @@ const EN = {
     'Applies to every finding of this product. Individual findings can be assigned to someone else.',
   'vom Produkt übernommen': 'inherited from the product',
   'Entfernen': 'Remove',
-  '(optional — später jederzeit im Reiter SBOMs)': '(optional — you can add it any time from the SBOMs tab)',
+  '(optional, auch später möglich)': '(optional, can be added later)',
   'Wird hereingezogen über': 'Pulled in via',
   'Produkt': 'Product',
   'Produkt → direkt eingebunden → … → verwundbare Komponente':
@@ -179,7 +179,7 @@ const EN = {
   'Erforderlich ist eine Version von': 'What is required is a release of',
   ', die': ' that ships',
   'oder neuer enthält.': 'or newer.',
-  'Ansatzpunkt ist die direkte Abhängigkeit': 'The place to start is the direct dependency',
+  'Auszutauschen ist die direkte Abhängigkeit': 'The direct dependency to replace is',
   'Anschrift des Lieferanten': 'Supplier address',
   '— 10 Jahre aufbewahren, für Behördenanfragen': '— keep for 10 years, for authority requests',
   'Straße, PLZ Ort, Land': 'Street, postcode, city, country',
@@ -187,16 +187,14 @@ const EN = {
   'Aufbewahren bis': 'Keep until',
   'Lieferant unterstützt bis': 'Supplier support until',
   'endet vor dem Produkt': 'ends before the product',
-  'Kernkomponente: Der Lieferant hört vor eurem Produkt auf':
-    'Core component: the supplier stops before your product does',
+  'Kernkomponente: Die Unterstützung des Lieferanten endet vor der des Produkts':
+    'Core component: the supplier’s support ends before the product’s',
   'gegen': 'vs',
   'Der eigene Unterstützungszeitraum ist zu kürzen oder ein Ersatz einzuplanen.':
     'The product support period has to be shortened, or a replacement planned.',
   'Sicherheitsupdates bis': 'Security updates until',
   '(Monat und Jahr)': '(month and year)',
   'kürzer als fünf Jahre — nur mit Begründung zulässig': 'shorter than five years — allowed only with justification',
-  'z. B. Gerät, Baugruppe': 'e.g. device, assembly',
-  'z. B. Backend, Firmware': 'e.g. backend, firmware',
   'Name': 'Name',
   'Paket-Kennung (purl)': 'Package ID (purl)',
   'z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor':
@@ -215,9 +213,9 @@ const EN = {
     'Use as the target version — the decision becomes “Fix now”',
   'Quellen': 'Sources',
   '(Meldung, Korrektur, Projektseite)': '(report, fix, project page)',
-  'Begründung': 'Justification',
-  'Bis wann gilt das?': 'Until when does this apply?',
-  'Warum diese Entscheidung?': 'Why this decision?',
+  'Begründung der Betroffenheit': 'Rationale for the affected status',
+  'Befristung': 'Time limit',
+  'Begründung der Entscheidung': 'Rationale for the decision',
   'Bekannt seit': 'Known since',
   'Nein / keine Nachweise': 'No / no evidence',
   'Meldung an den Komponenten-Hersteller': 'Report to the component manufacturer',
@@ -235,11 +233,11 @@ const EN = {
 
   // --- Hinweisboxen und Leerzustände ---
   'Noch keine SBOM für': 'No SBOM yet for',
-  'Keine Komponenten gefunden — CycloneDX (components[]) oder SPDX (packages[]) erwartet.':
-    'No components found — expected CycloneDX (components[]) or SPDX (packages[]).',
+  'Die Datei enthält keine Komponenten. Erwartet wird eine SBOM im Format CycloneDX oder SPDX.':
+    'The file contains no components. A SBOM in CycloneDX or SPDX format is expected.',
   'neu,': 'new,',
   'aktualisiert — Original archiviert': 'updated — original archived',
-  'ohne purl': 'without a purl',
+  'ohne Paket-Kennung': 'without a package ID',
 
   // --- Versionsvergleich ---
   'Vergleich wird berechnet …': 'Computing the comparison …',
@@ -277,39 +275,37 @@ const EN = {
   'Keine Komponenten für diesen Filter.': 'No components match this filter.',
   'Keine Funde für diesen Filter.': 'No findings match this filter.',
   'Keine Treffer für die Suche.': 'No matches for this search.',
-  'Noch keine Komponenten — im Reiter SBOMs eine SBOM importieren oder mit „+ Komponente“ Hardware anlegen.':
-    'No components yet — import an SBOM from the SBOMs tab, or add hardware with “+ Component”.',
-  'Noch keine Funde — oben „Auf Schwachstellen prüfen“ starten oder einen Fund erfassen.':
-    'No findings yet — run “Check for vulnerabilities” above, or record one.',
-  'Erst möglich, wenn Software mit purl im Inventar steht': 'Available once the inventory has software with a package ID (purl)',
-  'Erst möglich, wenn eine Datei gewählt ist': 'Available once a file is chosen',
+  'Noch keine Komponenten. Software kommt über den SBOM-Import, Hardware und Zukauf über „+ Komponente“.':
+    'No components yet. Software arrives via the SBOM import, hardware and purchased software via “+ Component”.',
+  'Noch keine Funde. Der Abgleich erfasst Software mit Paket-Kennung, alles Übrige über „+ Fund erfassen“.':
+    'No findings yet. The check covers software with a package ID; everything else via “+ Record finding”.',
+  'Erfordert Software mit Paket-Kennung im Inventar':
+    'Requires software with a package ID in the inventory',
+  'Erfordert eine ausgewählte Datei': 'Requires a selected file',
   '+ Komponente': '+ Component',
   '+ Fund erfassen': '+ Record finding',
   'Fund erfassen': 'Record a finding',
-  'Software kommt über den SBOM-Import. Hardware und zugekaufte Software werden hier angelegt.':
-    'Software arrives via the SBOM import. Hardware and purchased software are added here.',
-  'Der Abgleich findet Software automatisch. Meldungen per Mail, Meldungen des Lieferanten und Ergebnisse eigener Tests werden hier erfasst.':
-    'The check finds software issues automatically. Reports by email, supplier reports and results from in-house testing are recorded here.',
   'Kennung': 'Identifier',
   'CVE-Nummer oder Kennung der Meldung': 'CVE number or report identifier',
   '— keine Zuordnung —': '— no component —',
   'Zusammenfassung': 'Summary',
-  'Was ist betroffen, was ist passiert?': 'What is affected, what happened?',
+  'Kurzbeschreibung der Schwachstelle': 'Brief description of the vulnerability',
   'Komponente hinzufügen': 'Add component',
   'Funde an dieser Komponente': 'Findings on this component',
-  'es gibt keine Vorversion zum Vergleichen. Sobald eine zweite Version angelegt ist, steht hier, was sich geändert hat.':
-    'there is no previous version to compare against. Once a second version exists, what changed shows up here.',
+  'Es gibt keine Vorversion zum Vergleich. Der Unterschied der Komponenteninventare erscheint ab der zweiten Version.':
+    'There is no previous version to compare against. The difference between component inventories appears from the second version on.',
   'Behebung verfügbar seit': 'Fix available since',
-  '(sobald Update oder Abhilfe bereitsteht)': '(as soon as an update or workaround is available)',
-  'Ja — Unterstützungszeitraum des Lieferanten zählt mit': 'Yes — the supplier’s support period counts toward yours',
+  '(sobald eine Korrektur bereitsteht)': '(once a fix is available)',
+  'Ja — der Unterstützungszeitraum des Lieferanten ist zu berücksichtigen':
+    'Yes — the supplier’s support period has to be taken into account',
   'Nein': 'No',
   'Inverkehrbringen am': 'Placed on the market on',
   '(für die Fünfjahresprüfung)': '(for the five-year check)',
-  'Datum des Inverkehrbringens angeben, dann wird der Zeitraum geprüft':
-    'Enter the market-placement date and the period gets checked',
+  'Die Prüfung des Zeitraums erfordert das Datum des Inverkehrbringens':
+    'Checking the period requires the market-placement date',
   'Verantwortlichen entfernen? Gilt für alle Funde dieses Produkts.': 'Remove the owner? This applies to every finding of this product.',
-  'Version {v} löschen? Komponenten, SBOMs und Funde dieser Version gehen mit verloren.':
-    'Delete version {v}? Its components, SBOMs and findings are lost with it.',
+  'Version {v} löschen? Komponenten, SBOMs und Funde dieser Version werden mit gelöscht.':
+    'Delete version {v}? Its components, SBOMs and findings are deleted with it.',
   'entfernt': 'removed',
   'CVSS — Schweregrad von 0 bis 10, aus der Meldungsquelle': 'CVSS — severity from 0 to 10, from the advisory source',
   'z. B. SmartPanel 3000': 'e.g. SmartPanel 3000',
@@ -321,8 +317,8 @@ const EN = {
   // Fragezeichen-Erklärungen (D-037)
   'Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.':
     'The unique ID of the package. The check uses it to find vulnerabilities — without it the component stays unchecked.',
-  'Ist das Produkt durch diese Schwachstelle angreifbar? Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus.':
-    'Is the product exposed to this vulnerability? Not every vulnerability in a component affects the product.',
+  'Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus. Hier wird festgehalten, ob es tatsächlich angreifbar ist.':
+    'Not every vulnerability in a component affects the product. This records whether it is actually exposed.',
   'Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Der CVSS-Wert ist dafür kein Nachweis.':
     'There is solid evidence that the vulnerability is actually being attacked. The CVSS score is not evidence of this.',
   'Ohne diese Komponente erfüllt das Produkt seinen Zweck nicht mehr. Dann ist der Unterstützungszeitraum des Lieferanten beim eigenen zu berücksichtigen.':
@@ -339,9 +335,8 @@ const EN = {
   'nicht gefunden': 'not found',
   'Komponente nicht gefunden': 'Component not found',
   'Kennung fehlt': 'Identifier is missing',
-  'Kenntniszeitpunkt fehlt (startet die Fristen, Art. 14)': 'Time of knowledge is missing (it starts the deadlines, Art. 14)',
-  'Keine Software-Komponenten mit purl — erst SBOM importieren oder purl pflegen.':
-    'No software with a package ID (purl) — import an SBOM first or fill in the purl.',
+  'Kenntniszeitpunkt fehlt — Pflichtangabe.': 'Time of knowledge is missing — a required entry.',
+  'Keine Software mit Paket-Kennung im Inventar.': 'No software with a package ID in the inventory.',
 }
 
 const Ctx = createContext({ lang: 'de', t: s => s, setLang: () => {} })
