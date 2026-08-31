@@ -172,6 +172,10 @@ db.transaction(() => {
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_components_purl ON components(version_id, purl) WHERE purl != ''`)
 // 3) sboms.component_count zaehlte die Rohzeilen der Datei und widersprach damit dem
 //    bereinigten Inventar. Nachziehen, wo genau eine SBOM zur Version gehoert.
+// 4) Quellen-Etiketten bestehender Funde nachziehen: 'Advisory' war Fachjargon.
+db.exec(`UPDATE findings SET refs_json = replace(replace(replace(
+    refs_json, '"GitHub Advisory"', '"GitHub"'), '"label":"Advisory"', '"label":"Meldung"'), '"label":"Fix"', '"label":"Korrektur"')
+  WHERE refs_json LIKE '%Advisory%' OR refs_json LIKE '%"label":"Fix"%'`)
 db.exec(`UPDATE sboms SET component_count = (
     SELECT COUNT(*) FROM components c WHERE c.version_id = sboms.version_id AND c.source = 'sbom_import')
   WHERE (SELECT COUNT(*) FROM sboms s2 WHERE s2.version_id = sboms.version_id) = 1
@@ -487,16 +491,17 @@ function sourcesOf(rec) {
   const out = [], seen = new Set()
   const add = (label, url) => { if (url && !seen.has(url)) { seen.add(url); out.push({ label, url }) } }
   add('OSV', 'https://osv.dev/vulnerability/' + rec.id)
-  if (rec.id.startsWith('GHSA-')) add('GitHub Advisory', 'https://github.com/advisories/' + rec.id)
+  if (rec.id.startsWith('GHSA-')) add('GitHub', 'https://github.com/advisories/' + rec.id)
   for (const a of rec.aliases || []) {
     if (a.startsWith('CVE-')) add('NVD ' + a, 'https://nvd.nist.gov/vuln/detail/' + a)
-    if (a.startsWith('GHSA-')) add('GitHub Advisory', 'https://github.com/advisories/' + a)
+    if (a.startsWith('GHSA-')) add('GitHub', 'https://github.com/advisories/' + a)
   }
   const rank = { ADVISORY: 0, FIX: 1, REPORT: 2, PACKAGE: 3 }
   for (const r of (rec.references || []).filter(r => r.type in rank).sort((x, y) => rank[x.type] - rank[y.type])) {
     if (out.length >= 12) break
-    const label = r.type === 'FIX' ? 'Fix' : r.type === 'PACKAGE' ? 'Projekt'
-      : r.type === 'REPORT' ? 'Meldung' : 'Advisory'
+    // Deutsche Etiketten ohne Fachjargon — sie landen unuebersetzt in der Oberflaeche.
+    const label = r.type === 'FIX' ? 'Korrektur' : r.type === 'PACKAGE' ? 'Projekt'
+      : r.type === 'REPORT' ? 'Bericht' : 'Meldung'
     add(label, r.url)
   }
   return out

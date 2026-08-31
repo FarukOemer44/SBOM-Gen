@@ -37,8 +37,8 @@ const DECISIONS = [
 // Eingangskanäle (ENISA 4.13: Intake-Kanäle festhalten; D-020: Mail-Eingang beim Kunden)
 const INTAKE = [
   ['osv_scan', 'Automatischer Abgleich'],
-  ['cvd_mail', 'Meldung per Mail an die Sicherheitsadresse'],
-  ['advisory', 'Lieferanten-Advisory'],
+  ['cvd_mail', 'Meldung per Mail'],
+  ['advisory', 'Meldung des Lieferanten'],
   ['test', 'Eigene Tests'],
   ['csirt', 'Hinweis von außen'],
   ['other', 'Sonstiges'],
@@ -375,7 +375,7 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
         )}
       </>}
 
-      <div className="fieldlab">{t('Kernfunktion des Produkts')}<HelpDot text={t('Ohne diese Komponente tut das Produkt nicht mehr, wofür es gebaut ist. Dann zählt der Unterstützungszeitraum des Lieferanten für euren mit.')} /></div>
+      <div className="fieldlab">{t('Kernfunktion des Produkts')}<HelpDot text={t('Ohne diese Komponente erfüllt das Produkt seinen Zweck nicht mehr. Dann ist der Unterstützungszeitraum des Lieferanten beim eigenen zu berücksichtigen.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle on={!!f.is_core_function} onChange={v => set('is_core_function', v ? 1 : 0)} />
         <span className="muted">{f.is_core_function ? t('Ja — Unterstützungszeitraum des Lieferanten zählt mit') : t('Nein')}</span>
@@ -395,13 +395,13 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
         {monatVor(f.supplier_support_until, product?.support_until) && !!f.is_core_function && (
           <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
             {t('Kernkomponente: Der Lieferant hört vor eurem Produkt auf')} ({fmtM(f.supplier_support_until)} {t('gegen')} {fmtM(product.support_until)}).
-            {' '}{t('Kürzt euren Unterstützungszeitraum oder plant einen Ersatz.')}
+            {' '}{t('Der eigene Unterstützungszeitraum ist zu kürzen oder ein Ersatz einzuplanen.')}
           </div>
         )}
       </>}
 
       {!isOwn && <>
-        <div className="fieldlab">{t('Lieferant geprüft')}<HelpDot text={t('Was habt ihr geprüft, bevor ihr die Komponente eingebaut habt? Pflicht für alles, was ihr selbst ausgewählt habt.')} /></div>
+        <div className="fieldlab">{t('Lieferant geprüft')}<HelpDot text={t('Welche Prüfung erfolgte vor dem Einbau der Komponente? Pflicht für alle selbst ausgewählten Komponenten.')} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <Toggle on={f.dd_status === 'geprueft'} onChange={v => set('dd_status', v ? 'geprueft' : 'offen')} />
           {f.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
@@ -494,7 +494,7 @@ function FindingDrawer({ finding, onClose }) {
       <div className="dsub">{f.component_purl ? pshow(f.component_purl) + ' · ' : ''}{f.summary}</div>
       <div className="dsub">
         {t('Gemeldet über:')} {t(intakeLabel(f.intake_channel))}
-        {f.published ? ' · ' + t('Advisory veröffentlicht:') + ' ' + fmtD(f.published) : ''}
+        {f.published ? ' · ' + t('Meldung veröffentlicht:') + ' ' + fmtD(f.published) : ''}
       </div>
 
       {/* Behebung und Quellen — automatisch beim Abgleich aus OSV übernommen */}
@@ -515,14 +515,16 @@ function FindingDrawer({ finding, onClose }) {
               {f.fixed_versions.split(', ').map(v => (
                 <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')
                   + (v === empfohleneFixVersion(f.component_version, f.fixed_versions.split(', ')) ? ' empfohlen' : '')}
-                  title={t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
-                  onClick={() => apply({ fix_version: v, decision: f.decision || 'fix_now' })}>
+                  title={f.fix_version === v ? t('Zielversion entfernen') : t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
+                  onClick={() => apply(f.fix_version === v
+                    ? { fix_version: '' }
+                    : { fix_version: v, decision: f.decision || 'fix_now' })}>
                   {f.component_name} {v}
                 </button>
               ))}
               {f.fix_version && <Pill kind="blue">{t('Zielversion:')} {f.fix_version}</Pill>}
             </div>
-          : <span className="muted">{t('Keine Versionsangabe im Advisory.')}</span>}
+          : <span className="muted">{t('Die Meldung nennt keine behebende Version.')}</span>}
 
       <DependencyPath componentId={f.component_id} componentName={f.component_name}
         ziel={empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', '))} />
@@ -533,12 +535,12 @@ function FindingDrawer({ finding, onClose }) {
         if (!refs.length) return null
         return (
           <>
-            <div className="fieldlab">{t('Quellen')} <span className="fund">{t('(Advisory, Fix-Commit, Projektseite)')}</span></div>
+            <div className="fieldlab">{t('Quellen')} <span className="fund">{t('(Meldung, Korrektur, Projektseite)')}</span></div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {refs.map((r, i) => (
                 <a key={i} className="chip blue" href={r.url} target="_blank" rel="noreferrer noopener"
                    style={{ textDecoration: 'none' }} title={r.url}>
-                  {r.label} ↗
+                  {t(r.label.replace('GitHub Advisory', 'GitHub'))} ↗
                 </a>
               ))}
             </div>
@@ -546,7 +548,7 @@ function FindingDrawer({ finding, onClose }) {
         )
       })()}
 
-      <div className="fieldlab">{t('Betroffenheit')}<HelpDot text={t('Ist euer Produkt durch diese Schwachstelle wirklich angreifbar? Nicht jede Schwachstelle in einer Komponente trifft euch.')} /></div>
+      <div className="fieldlab">{t('Betroffenheit')}<HelpDot text={t('Ist das Produkt durch diese Schwachstelle angreifbar? Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus.')} /></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {VEX_STATI.map(([v, label]) => (
           <span key={v} className={'tabpill' + (f.vex_status === v ? ' active' : '')} onClick={() => set('vex_status', v)}>{t(label)}</span>
@@ -587,7 +589,7 @@ function FindingDrawer({ finding, onClose }) {
       <input type="date" className="field" style={{ maxWidth: 220 }} value={f.mitigation_available_at || ''}
         onChange={e => set('mitigation_available_at', e.target.value)} />
 
-      <div className="fieldlab">{t('Aktiv ausgenutzt')}<HelpDot text={t('Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Nie aus dem CVSS-Wert ableiten.')} /></div>
+      <div className="fieldlab">{t('Aktiv ausgenutzt')}<HelpDot text={t('Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Der CVSS-Wert ist dafür kein Nachweis.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle on={!!f.actively_exploited} onChange={v => set('actively_exploited', v ? 1 : 0)} />
         <span className="muted">{f.actively_exploited ? t('Ja — verlässliche Nachweise erforderlich') : t('Nein / keine Nachweise')}</span>
@@ -608,7 +610,7 @@ function FindingDrawer({ finding, onClose }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
-        {f.vex_status === 'fixed' && <button className="hb" onClick={advisory}>{t('Advisory-Entwurf')}</button>}
+        {f.vex_status === 'fixed' && <button className="hb" onClick={advisory}>{t('Sicherheitshinweis (Entwurf)')}</button>}
         <span style={{ flex: 1 }} />
       </div>
     </Drawer>
@@ -666,11 +668,11 @@ function NewFindingModal({ onClose }) {
   return (
     <Modal onClose={onClose} width={520}>
       <div style={{ display: 'flex', alignItems: 'center' }}><span className="dtitle" style={{ flex: 1 }}>{t('Fund erfassen')}</span><CloseX onClick={onClose} /></div>
-      <div className="dsub">{t('Der Abgleich findet Software automatisch. Was per Mail, Lieferanten-Advisory oder aus eigenen Tests hereinkommt, erfasst du hier.')}</div>
+      <div className="dsub">{t('Der Abgleich findet Software automatisch. Meldungen per Mail, Meldungen des Lieferanten und Ergebnisse eigener Tests werden hier erfasst.')}</div>
 
       <div className="fieldlab">{t('Kennung')}</div>
       <input className="field" value={f.vuln_id} onChange={e => upd('vuln_id', e.target.value)}
-        placeholder={t('CVE-Nummer oder Advisory-Kennung')} autoFocus />
+        placeholder={t('CVE-Nummer oder Kennung der Meldung')} autoFocus />
 
       <div className="fieldlab">{t('Komponente')}</div>
       <select className="field" value={f.component_id} onChange={e => upd('component_id', e.target.value)}>
@@ -730,7 +732,7 @@ function DiffTab({ versionLabel }) {
   if (!diff) return <div className="hintbox" style={{ margin: 16 }}>{t('Vergleich wird berechnet …')}</div>
   if (!diff.base) return (
     <div className="hintbox" style={{ margin: 16 }}>
-      <b style={{ color: '#0B1928' }}>{t('Erste Version')}</b> — {t('es gibt keine Vorversion zum Vergleichen. Sobald du eine zweite Version anlegst, steht hier, was sich geändert hat.')}
+      <b style={{ color: '#0B1928' }}>{t('Erste Version')}</b> — {t('es gibt keine Vorversion zum Vergleichen. Sobald eine zweite Version angelegt ist, steht hier, was sich geändert hat.')}
     </div>
   )
   const kindLabel = k => kindMeta(k)[1]
@@ -808,9 +810,9 @@ function DependencyPath({ componentId, componentName, ziel }) {
   const direkt = pfad[0]
   return (
     <>
-      <div className="fieldlab">{t('Wird hereingezogen über')}<HelpDot text={t('Über welche eurer direkten Abhängigkeiten dieses Paket hereinkommt.')} /></div>
+      <div className="fieldlab">{t('Wird hereingezogen über')}<HelpDot text={t('Über welche direkte Abhängigkeit das Paket in das Produkt gelangt.')} /></div>
       <div className="deppath">
-        <span className="depnode root" title={t('Euer Produkt')}>{product?.name || t('Produkt')}</span>
+        <span className="depnode root">{product?.name || t('Produkt')}</span>
         {pfad.map((c, i) => (
           <React.Fragment key={i}>
             <span className="deparrow">→</span>
@@ -824,9 +826,9 @@ function DependencyPath({ componentId, componentName, ziel }) {
         {t('Produkt → direkt eingebunden → … → verwundbare Komponente')}
       </div>
       <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
-        <b>{componentName}</b> {t('habt ihr nicht direkt eingebunden — es lässt sich nicht einzeln austauschen.')}
+        <b>{componentName}</b> {t('ist keine direkte Abhängigkeit und kann nicht einzeln ausgetauscht werden.')}
         {ziel
-          ? <> {t('Ihr braucht eine Version von')} <b>{direkt.name}</b>{t(', die')} <b>{componentName} {ziel}</b> {t('oder neuer enthält.')}</>
+          ? <> {t('Erforderlich ist eine Version von')} <b>{direkt.name}</b>{t(', die')} <b>{componentName} {ziel}</b> {t('oder neuer enthält.')}</>
           : <> {t('Ansatzpunkt ist die direkte Abhängigkeit')} <b>{direkt.name}</b>.</>}
       </div>
     </>
@@ -1187,7 +1189,7 @@ export default function SbomTool() {
       <TitleBar title={t('SBOM & Komponenten')} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#0B1928' }}>{t('Noch kein Produkt angelegt')}</div>
-        <div className="muted" style={{ maxWidth: 500, textAlign: 'center', lineHeight: 1.7 }}>{t('Komponenten, SBOMs und Funde hängen an der Produktversion. Lege ein Produkt mit seiner ersten Version an — danach importierst du die SBOM, die dein Build erzeugt.')}
+        <div className="muted" style={{ maxWidth: 500, textAlign: 'center', lineHeight: 1.7 }}>{t('Komponenten, SBOMs und Funde hängen an der Produktversion. Zuerst ein Produkt mit seiner ersten Version anlegen, danach die SBOM des Builds importieren.')}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
           <button className="ab" onClick={() => setModal('produkt')}>{t('Neues Produkt anlegen')}</button>
@@ -1242,7 +1244,7 @@ export default function SbomTool() {
           <div className="l">{t('Lieferanten geprüft')}</div>
           <div className="v">{geprueft}<span style={{ fontSize: 13, fontWeight: 500, color: '#8B95A3' }}> / {ddPool.length}</span></div>
           <div className="progress" style={{ marginTop: 7 }}><div style={{ width: (ddPool.length ? geprueft / ddPool.length * 100 : 0) + '%', background: '#27AE60' }} /></div>
-          <div className="s">{t('von den Komponenten, die ihr selbst ausgewählt habt')}</div>
+          <div className="s">{t('von den selbst ausgewählten Komponenten')}</div>
         </div>
         <div className="kpi">
           <div className="l">{t('Funde insgesamt')}</div>
@@ -1274,7 +1276,7 @@ export default function SbomTool() {
       {/* ---------- Reiter 1: Komponenten (Inventar = Obermenge, Abschnitt 1.6) ---------- */}
       {tab === 'komponenten' && <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
-          <span className="muted" style={{ flex: 1 }}>{t('Software kommt über den SBOM-Import; Hardware und Zukauf legst du hier an.')}</span>
+          <span className="muted" style={{ flex: 1 }}>{t('Software kommt über den SBOM-Import. Hardware und zugekaufte Software werden hier angelegt.')}</span>
           <button className="ab sm" onClick={() => setCompOpen('neu')} disabled={!version}>{t('+ Komponente')}</button>
         </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
@@ -1349,7 +1351,7 @@ export default function SbomTool() {
       {/* ---------- Reiter 3: Funde (Schwachstellen auf dem Inventar) ---------- */}
       {tab === 'funde' && <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
-          <span className="muted" style={{ flex: 1 }}>{t('Der Abgleich findet Software automatisch. Was per Mail, Lieferanten-Advisory oder aus eigenen Tests hereinkommt, erfasst du hier.')}</span>
+          <span className="muted" style={{ flex: 1 }}>{t('Der Abgleich findet Software automatisch. Meldungen per Mail, Meldungen des Lieferanten und Ergebnisse eigener Tests werden hier erfasst.')}</span>
           <button className="ab sm" onClick={() => setModal('fund')} disabled={!version}>{t('+ Fund erfassen')}</button>
         </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>

@@ -24,7 +24,7 @@ const EN = {
   'Hardware ·': 'hardware ·',
   'Software (SBOM)': 'software (SBOM)',
   'Lieferanten geprüft': 'Suppliers reviewed',
-  'von den Komponenten, die ihr selbst ausgewählt habt': 'of the components you chose yourselves',
+  'von den selbst ausgewählten Komponenten': 'of the components selected in-house',
   'Funde insgesamt': 'Findings total',
   'kritisch ·': 'critical ·',
   'hoch ·': 'high ·',
@@ -96,8 +96,8 @@ const EN = {
   'Risiko akzeptieren (befristet)': 'Accept risk (time bound)',
   'Zurückstellen': 'Defer',
   'Automatischer Abgleich': 'Automatic check',
-  'Meldung per Mail an die Sicherheitsadresse': 'Report by email to the security address',
-  'Lieferanten-Advisory': 'Supplier advisory',
+  'Meldung per Mail': 'Report by email',
+  'Meldung des Lieferanten': 'Supplier report',
   'Sonstiges': 'Other',
 
   // --- Produkt/Version anlegen ---
@@ -127,11 +127,11 @@ const EN = {
   'Die Zusammensetzung wird je Version geführt.': 'Composition is tracked per version.',
   'Hardware und Software stehen im Inventar; in die SBOM gehört nur Software.':
     'Hardware and software live in the inventory; only software belongs in the SBOM.',
-  'Advisory-Entwurf': 'Advisory draft',
+  'Sicherheitshinweis (Entwurf)': 'Security advisory (draft)',
   'Herunterladen': 'Download',
   'Neu hinzugekommen': 'Newly added',
-  'Komponenten, SBOMs und Funde hängen an der Produktversion. Lege ein Produkt mit seiner ersten Version an — danach importierst du die SBOM, die dein Build erzeugt.':
-    'Components, SBOMs and findings attach to the product version. Create a product with its first version — then import the SBOM your build produces.',
+  'Komponenten, SBOMs und Funde hängen an der Produktversion. Zuerst ein Produkt mit seiner ersten Version anlegen, danach die SBOM des Builds importieren.':
+    'Components, SBOMs and findings attach to the product version. First create a product with its first version, then import the SBOM from the build.',
   'aktiv ausgenutzt': 'actively exploited',
   'Ja — verlässliche Nachweise erforderlich': 'Yes — reliable evidence required',
   'Eigene Tests': 'Own testing',
@@ -166,15 +166,14 @@ const EN = {
     'A product can have several SBOMs — one per artifact, say backend and firmware. They all feed one component inventory.',
   '(optional — später jederzeit im Reiter SBOMs)': '(optional — you can add it any time from the SBOMs tab)',
   'Wird hereingezogen über': 'Pulled in via',
-  'Euer Produkt': 'Your product',
   'Produkt': 'Product',
   'Produkt → direkt eingebunden → … → verwundbare Komponente':
     'product → direct dependency → … → vulnerable component',
   'Eingebaut ist': 'Currently installed:',
   'behoben ab': 'fixed in',
-  'habt ihr nicht direkt eingebunden — es lässt sich nicht einzeln austauschen.':
-    'is not one of your direct dependencies — it cannot be replaced on its own.',
-  'Ihr braucht eine Version von': 'You need a release of',
+  'ist keine direkte Abhängigkeit und kann nicht einzeln ausgetauscht werden.':
+    'is not a direct dependency and cannot be replaced on its own.',
+  'Erforderlich ist eine Version von': 'What is required is a release of',
   ', die': ' that ships',
   'oder neuer enthält.': 'or newer.',
   'Ansatzpunkt ist die direkte Abhängigkeit': 'The place to start is the direct dependency',
@@ -188,8 +187,8 @@ const EN = {
   'Kernkomponente: Der Lieferant hört vor eurem Produkt auf':
     'Core component: the supplier stops before your product does',
   'gegen': 'vs',
-  'Kürzt euren Unterstützungszeitraum oder plant einen Ersatz.':
-    'Shorten your support period or plan a replacement.',
+  'Der eigene Unterstützungszeitraum ist zu kürzen oder ein Ersatz einzuplanen.':
+    'The product support period has to be shortened, or a replacement planned.',
   'Sicherheitsupdates bis': 'Security updates until',
   '(Monat und Jahr)': '(month and year)',
   'kürzer als fünf Jahre — nur mit Begründung zulässig': 'shorter than five years — allowed only with justification',
@@ -210,15 +209,15 @@ const EN = {
   // --- Fund-Drawer ---
   'Aktiv ausgenutzt': 'Actively exploited',
   'Gemeldet über:': 'Reported via:',
-  'Advisory veröffentlicht:': 'Advisory published:',
+  'Meldung veröffentlicht:': 'Report published:',
   'Art der Schwachstelle (CWE-Katalog)': 'Type of weakness (CWE catalogue)',
   'Behoben in:': 'Fixed in:',
   'Keine Behebung verfügbar': 'No fix available',
-  'Keine Versionsangabe im Advisory.': 'The advisory does not name a fixed version.',
+  'Die Meldung nennt keine behebende Version.': 'The report does not name a fixed version.',
   'Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“':
     'Use as the target version — the decision becomes “Fix now”',
   'Quellen': 'Sources',
-  '(Advisory, Fix-Commit, Projektseite)': '(advisory, fix commit, project page)',
+  '(Meldung, Korrektur, Projektseite)': '(report, fix, project page)',
   'Begründung': 'Justification',
   'Bis wann gilt das?': 'Until when does this apply?',
   'Warum diese Entscheidung?': 'Why this decision?',
@@ -272,6 +271,11 @@ const EN = {
   'ohne Paket-Kennung — wird bei der Prüfung übersprungen': 'no package ID — skipped by the check',
   'auf': 'to',
   'Gewählte Zielversion': 'Chosen target version',
+  'Zielversion entfernen': 'Remove target version',
+  'Meldung': 'Report',
+  'Korrektur': 'Fix',
+  'Bericht': 'Report page',
+  'Projekt': 'Project',
   'Kernfunktion des Produkts': 'Core function of the product',
   'Lieferant geprüft': 'Supplier reviewed',
   'Keine Komponenten für diesen Filter.': 'No components match this filter.',
@@ -286,19 +290,19 @@ const EN = {
   '+ Komponente': '+ Component',
   '+ Fund erfassen': '+ Record finding',
   'Fund erfassen': 'Record a finding',
-  'Software kommt über den SBOM-Import; Hardware und Zukauf legst du hier an.':
-    'Software arrives via the SBOM import; hardware and purchased software are added here.',
-  'Der Abgleich findet Software automatisch. Was per Mail, Lieferanten-Advisory oder aus eigenen Tests hereinkommt, erfasst du hier.':
-    'The check finds software issues automatically. Whatever arrives by email, supplier advisory or your own testing is recorded here.',
+  'Software kommt über den SBOM-Import. Hardware und zugekaufte Software werden hier angelegt.':
+    'Software arrives via the SBOM import. Hardware and purchased software are added here.',
+  'Der Abgleich findet Software automatisch. Meldungen per Mail, Meldungen des Lieferanten und Ergebnisse eigener Tests werden hier erfasst.':
+    'The check finds software issues automatically. Reports by email, supplier reports and results from in-house testing are recorded here.',
   'Kennung': 'Identifier',
-  'CVE-Nummer oder Advisory-Kennung': 'CVE number or advisory identifier',
+  'CVE-Nummer oder Kennung der Meldung': 'CVE number or report identifier',
   '— keine Zuordnung —': '— no component —',
   'Zusammenfassung': 'Summary',
   'Was ist betroffen, was ist passiert?': 'What is affected, what happened?',
   'Komponente hinzufügen': 'Add component',
   'Funde an dieser Komponente': 'Findings on this component',
-  'es gibt keine Vorversion zum Vergleichen. Sobald du eine zweite Version anlegst, steht hier, was sich geändert hat.':
-    'there is no previous version to compare against. As soon as you create a second version, what changed shows up here.',
+  'es gibt keine Vorversion zum Vergleichen. Sobald eine zweite Version angelegt ist, steht hier, was sich geändert hat.':
+    'there is no previous version to compare against. Once a second version exists, what changed shows up here.',
   'Behebung verfügbar seit': 'Fix available since',
   '(sobald Update oder Abhilfe bereitsteht)': '(as soon as an update or workaround is available)',
   'Ja — Unterstützungszeitraum des Lieferanten zählt mit': 'Yes — the supplier’s support period counts toward yours',
@@ -323,16 +327,16 @@ const EN = {
     'The unique ID of the package. The check uses it to find vulnerabilities — without it the component stays unchecked.',
   'Kennung für Hardware und Firmware aus dem staatlichen Schwachstellenkatalog (NVD). Freiwillig.':
     'An ID for hardware and firmware from the national vulnerability catalogue (NVD). Optional.',
-  'Ist euer Produkt durch diese Schwachstelle wirklich angreifbar? Nicht jede Schwachstelle in einer Komponente trifft euch.':
-    'Is your product actually exposed to this vulnerability? Not every vulnerability in a component affects you.',
-  'Was habt ihr geprüft, bevor ihr die Komponente eingebaut habt? Pflicht für alles, was ihr selbst ausgewählt habt.':
-    'What did you check before building the component in? Required for everything you chose yourselves.',
-  'Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Nie aus dem CVSS-Wert ableiten.':
-    'There is solid evidence that the vulnerability is actually being attacked. Never derive this from the CVSS score.',
-  'Ohne diese Komponente tut das Produkt nicht mehr, wofür es gebaut ist. Dann zählt der Unterstützungszeitraum des Lieferanten für euren mit.':
-    'Without this component the product no longer does what it was built for. Then the supplier’s support period counts toward yours.',
-  'Über welche eurer direkten Abhängigkeiten dieses Paket hereinkommt.':
-    'Which of your direct dependencies pulls this package in.',
+  'Ist das Produkt durch diese Schwachstelle angreifbar? Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus.':
+    'Is the product exposed to this vulnerability? Not every vulnerability in a component affects the product.',
+  'Welche Prüfung erfolgte vor dem Einbau der Komponente? Pflicht für alle selbst ausgewählten Komponenten.':
+    'What was checked before the component was built in? Required for every component selected in-house.',
+  'Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Der CVSS-Wert ist dafür kein Nachweis.':
+    'There is solid evidence that the vulnerability is actually being attacked. The CVSS score is not evidence of this.',
+  'Ohne diese Komponente erfüllt das Produkt seinen Zweck nicht mehr. Dann ist der Unterstützungszeitraum des Lieferanten beim eigenen zu berücksichtigen.':
+    'Without this component the product no longer serves its purpose. The supplier’s support period then has to be taken into account when setting the product’s own.',
+  'Über welche direkte Abhängigkeit das Paket in das Produkt gelangt.':
+    'Which direct dependency pulls this package into the product.',
 
   // Servermeldungen — der Server spricht deutsch, das Wörterbuch übersetzt (stabile Sätze als Schlüssel)
   'Name fehlt': 'Name is missing',
