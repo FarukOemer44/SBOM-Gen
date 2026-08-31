@@ -45,6 +45,18 @@ const INTAKE = [
 ]
 const intakeLabel = v => (INTAKE.find(x => x[0] === v) || [v, v])[1]
 
+// Art. 23 Abs. 2: Lieferantenangaben zehn Jahre nach dem Bezug vorlegbar halten.
+function aufbewahrenBis(bezug) {
+  if (!bezug) return null
+  const d = new Date(bezug)
+  if (isNaN(d)) return null
+  d.setFullYear(d.getFullYear() + 10)
+  return d
+}
+// Endet die Unterstuetzung einer Kernkomponente vor der des Produkts, ist das der
+// Konflikt, den Art. 13 Abs. 8 im Blick hat.
+const monatVor = (a, b) => !!a && !!b && a < b
+
 // Aus der Liste der behobenen Versionen die passende Zielversion waehlen. Advisories
 // nennen oft mehrere Wartungszweige (6.10.3, 6.9.7, 6.7.3 …). Fuer ein eingebautes
 // 6.7.0 ist 6.7.3 die richtige Antwort — der kleinste Sprung im selben Zweig.
@@ -287,7 +299,7 @@ function NewVersionModal({ onClose }) {
 // ---------- Komponenten-Drawer (anlegen/bearbeiten) ----------
 function ComponentDrawer({ comp, onClose }) {
   const t = useT()
-  const { call, sel } = useStore()
+  const { call, sel, product } = useStore()
   const blank = {
     kind: 'software_oss', name: '', version: '', supplier: '', purl: '', cpe: '', license: '',
     is_core_function: 0, dd_status: 'offen', dd_note: '',
@@ -333,6 +345,42 @@ function ComponentDrawer({ comp, onClose }) {
       <input className="field" value={f.cpe} onChange={e => set('cpe', e.target.value, { debounce: true })} placeholder="cpe:2.3:h:…" />
       <div className="fieldlab">{t('Lizenz')} <span className="fund">{t('(nur mitgespeichert — keine Lizenzanalyse, D-006)')}</span></div>
       <input className="field" value={f.license} onChange={e => set('license', e.target.value, { debounce: true })} />
+
+      {!isOwn && f.kind !== 'software_oss' && <>
+        <div className="fieldlab">{t('Anschrift des Lieferanten')} <span className="fund">{t('(auf Anfrage der Marktüberwachung, 10 Jahre)')}</span></div>
+        <textarea className="field" rows={2} value={f.supplier_address || ''}
+          onChange={e => set('supplier_address', e.target.value, { debounce: true })}
+          placeholder={t('Straße, PLZ Ort, Land')} />
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div className="fieldlab">{t('Bezogen am')}</div>
+            <input type="date" className="field" value={f.acquired_at || ''}
+              onChange={e => set('acquired_at', e.target.value)} />
+            {aufbewahrenBis(f.acquired_at) && (
+              <div className="muted" style={{ marginTop: 6 }}>
+                {t('Angaben vorzuhalten bis')} <b>{fmtD(aufbewahrenBis(f.acquired_at).toISOString())}</b>
+              </div>
+            )}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="fieldlab">{t('Unterstützt bis')}</div>
+            <input type="month" className="field" value={f.supplier_support_until || ''}
+              onChange={e => set('supplier_support_until', e.target.value)} />
+            {monatVor(f.supplier_support_until, product?.support_until) && (
+              <div style={{ marginTop: 6 }}>
+                <Pill kind="red">{t('endet vor dem Produkt')}</Pill>
+              </div>
+            )}
+          </div>
+        </div>
+        {monatVor(f.supplier_support_until, product?.support_until) && !!f.is_core_function && (
+          <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
+            {t('Kernkomponente: Die Unterstützung endet vor der des Produkts')} ({product.support_until}).
+            {' '}{t('Das ist bei der Festlegung des Unterstützungszeitraums zu berücksichtigen.')}
+          </div>
+        )}
+      </>}
 
       <div className="fieldlab">{t('Kernfunktion des Produkts?')}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -814,8 +862,10 @@ function OwnerPicker() {
   const { product, call, reloadProducts } = useStore()
   const [open, setOpen] = useState(false)
   const [val, setVal] = useState(product?.owner || '')
+  const [bis, setBis] = useState(product?.support_until || '')
   const ref = useRef(null)
   React.useEffect(() => { setVal(product?.owner || '') }, [product?.owner])
+  React.useEffect(() => { setBis(product?.support_until || '') }, [product?.support_until])
   React.useEffect(() => {
     if (!open) return
     const away = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -824,10 +874,12 @@ function OwnerPicker() {
   }, [open])
 
   const save = async () => {
-    await call('PATCH', '/api/products/' + product.id, { owner: val.trim() })
+    await call('PATCH', '/api/products/' + product.id, { owner: val.trim(), support_until: bis })
     await reloadProducts()
     setOpen(false)
   }
+  // Art. 13 Abs. 8: mindestens fuenf Jahre, kuerzer nur bei kuerzerer Nutzungsdauer.
+  const jahreBis = bis ? (new Date(bis + '-01') - Date.now()) / (365.25 * 24 * 3600 * 1000) : null
   const initials = (product?.owner || '').split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
@@ -840,11 +892,18 @@ function OwnerPicker() {
       </button>
       {open && (
         <div className="popmenu" style={{ padding: 12, minWidth: 260 }}>
-          <div style={{ fontSize: 12, color: '#69778E', lineHeight: 1.5, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: '#69778E', lineHeight: 1.5, marginBottom: 10 }}>
             {t('Gilt für alle Funde dieses Produkts. Einzelne Funde können abweichend zugewiesen werden.')}
           </div>
+          <div className="fieldlab" style={{ marginTop: 0 }}>{t('Verantwortlich')}</div>
           <input className="field" value={val} autoFocus placeholder={t('Name')}
             onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
+
+          <div className="fieldlab">{t('Unterstützungszeitraum bis')} <span className="fund">{t('(Monat und Jahr)')}</span></div>
+          <input type="month" className="field" value={bis} onChange={e => setBis(e.target.value)} />
+          {jahreBis !== null && jahreBis < 5 && (
+            <div style={{ marginTop: 6 }}><Pill kind="amber">{t('unter fünf Jahren — Begründung nötig')}</Pill></div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
             {product?.owner && <button className="hb sm" style={{ marginRight: 'auto' }} onClick={() => { setVal(''); call('PATCH', '/api/products/' + product.id, { owner: '' }).then(reloadProducts).then(() => setOpen(false)) }}>{t('Entfernen')}</button>}
             <button className="ab sm" onClick={save}>{t('Übernehmen')}</button>

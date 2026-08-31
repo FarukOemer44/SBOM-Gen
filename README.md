@@ -98,6 +98,23 @@ inherits it — the list shows the inherited name in grey — and an individual 
 assigned to someone else in its drawer. ENISA 4.13 asks for *an* owner for triage and tracking,
 which is one person for a product, not a field to fill in on every row.
 
+### Supplier records and support periods
+
+For hardware and purchased software the drawer carries what the regulation asks an economic
+operator to be able to produce: the supplier's **name and address**, and the date the component was
+acquired. From that date the tool shows how long the record has to be kept — Art. 23(2) says ten
+years after acquisition, so a component bought in March 2026 stays on file until March 2036.
+
+Next to it sits the supplier's own **support period**. The interesting case is the conflict: the
+product is supported until 2031-06, the panel firmware only until 2028-12. If that component carries
+a core function, the drawer says so plainly — Art. 13(8) lists the support periods of integrated
+third-party components with core functions as a factor when setting your own. The product's support
+period lives in the product popover next to the version selector, with a warning below five years,
+which is the statutory floor unless the product is expected to be in service for less.
+
+None of this applies to open source: there is no economic operator to name and no committed support
+period, so the block only appears for hardware and purchased software.
+
 ### Due diligence applies to what you choose
 
 The due diligence record is scoped to the components a manufacturer actually selects: hardware,

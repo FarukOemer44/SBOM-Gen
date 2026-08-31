@@ -88,15 +88,27 @@ const DETAIL_PARALLEL = 10   // parallele Detail-Abfragen an /v1/vulns
 // Spalten, die erst spaeter dazukamen — bestehende Datenbanken nachziehen
 // Komponenten: direkte Abhaengigkeit? Nur fuer diese (und Hardware/Zukauf) ist die
 // Sorgfaltspflicht praktikabel — transitive Pakete waehlt niemand aus.
-{
-  const has = db.prepare('PRAGMA table_info(components)').all().some(c => c.name === 'is_direct')
-  if (!has) db.exec('ALTER TABLE components ADD COLUMN is_direct INTEGER DEFAULT 0')
+for (const [col, ddl] of [
+  ['is_direct', 'INTEGER DEFAULT 0'],
+  // Art. 23: Name UND Anschrift der Lieferanten, zehn Jahre lang vorlegbar.
+  ['supplier_address', "TEXT DEFAULT ''"],
+  ['acquired_at', "TEXT DEFAULT ''"],          // Bezugsdatum — Start der Zehnjahresfrist
+  // Art. 13 Abs. 8: Unterstuetzungszeitraeume integrierter Drittkomponenten
+  // mit Kernfunktionen sind ein Abwaegungsfaktor.
+  ['supplier_support_until', "TEXT DEFAULT ''"],
+]) {
+  const has = db.prepare('PRAGMA table_info(components)').all().some(c => c.name === col)
+  if (!has) db.exec(`ALTER TABLE components ADD COLUMN ${col} ${ddl}`)
 }
 // Eine verantwortliche Person je Produkt statt einer je Fund: ENISA 4.13 meint
 // einen Owner fuer Triage und Nachverfolgung, nicht 238 einzelne Zuweisungen.
-{
-  const has = db.prepare('PRAGMA table_info(products)').all().some(c => c.name === 'owner')
-  if (!has) db.exec("ALTER TABLE products ADD COLUMN owner TEXT DEFAULT ''")
+for (const [col, ddl] of [
+  ['owner', "TEXT DEFAULT ''"],
+  // Art. 13 Abs. 19: Enddatum mindestens mit Monat und Jahr angeben (YYYY-MM).
+  ['support_until', "TEXT DEFAULT ''"],
+]) {
+  const has = db.prepare('PRAGMA table_info(products)').all().some(c => c.name === col)
+  if (!has) db.exec(`ALTER TABLE products ADD COLUMN ${col} ${ddl}`)
 }
 
 for (const [col, ddl] of [
@@ -139,9 +151,10 @@ app.post('/api/products', (req, res) => {
 app.patch('/api/products/:id', (req, res) => {
   const cur = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id)
   if (!cur) return res.status(404).json({ error: 'Produkt nicht gefunden' })
-  const { name, hersteller, owner } = req.body
-  db.prepare('UPDATE products SET name=?, hersteller=?, owner=? WHERE id=?')
-    .run(name ?? cur.name, hersteller ?? cur.hersteller, owner ?? cur.owner, req.params.id)
+  const { name, hersteller, owner, support_until } = req.body
+  db.prepare('UPDATE products SET name=?, hersteller=?, owner=?, support_until=? WHERE id=?')
+    .run(name ?? cur.name, hersteller ?? cur.hersteller, owner ?? cur.owner,
+      support_until ?? cur.support_until, req.params.id)
   audit('product.update', (name ?? cur.name) + (owner !== undefined ? ' · verantwortlich: ' + owner : ''))
   res.json({ ok: true })
 })
@@ -171,10 +184,12 @@ app.post('/api/products/:id/versions', (req, res) => {
     const all = db.prepare('SELECT * FROM components WHERE version_id = ?').all(copyFrom)
     const comps = mode === 'new_sbom' ? all.filter(c => c.kind === 'hardware') : all
     const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-      is_direct, is_core_function, dd_status, dd_note, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      is_direct, is_core_function, dd_status, dd_note, supplier_address, acquired_at, supplier_support_until,
+      source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     for (const c of comps) {
       ins.run(uid(), vid, c.kind, c.name, c.version, c.supplier, c.purl, c.cpe, c.license,
-        c.is_direct, c.is_core_function, c.dd_status, c.dd_note, c.source, now())
+        c.is_direct, c.is_core_function, c.dd_status, c.dd_note,
+        c.supplier_address, c.acquired_at, c.supplier_support_until, c.source, now())
       copied++
     }
     if (mode === 'unchanged') {
@@ -245,9 +260,11 @@ app.patch('/api/components/:id', (req, res) => {
   if (!cur) return res.status(404).json({ error: 'nicht gefunden' })
   const c = { ...cur, ...req.body }
   db.prepare(`UPDATE components SET kind=?, name=?, version=?, supplier=?, purl=?, cpe=?, license=?,
-    is_core_function=?, dd_status=?, dd_note=? WHERE id=?`)
+    is_core_function=?, dd_status=?, dd_note=?,
+    supplier_address=?, acquired_at=?, supplier_support_until=? WHERE id=?`)
     .run(c.kind, c.name, c.version, c.supplier, c.purl, c.cpe, c.license,
-      c.is_core_function ? 1 : 0, c.dd_status, c.dd_note, req.params.id)
+      c.is_core_function ? 1 : 0, c.dd_status, c.dd_note,
+      c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '', req.params.id)
   audit('component.update', c.name)
   res.json(versionData(cur.version_id))
 })
