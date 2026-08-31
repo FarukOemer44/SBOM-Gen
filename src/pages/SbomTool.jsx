@@ -455,6 +455,24 @@ function FindingDrawer({ finding, onClose }) {
   const [f, set, saved, apply] = useAutoSave('/api/findings/' + finding.id, { ...finding }, call)
   // Empfehlung einmal berechnen — sie wird im Satz und an den Versionsknoepfen gebraucht.
   const empfohlen = empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', ').filter(Boolean))
+
+  // Die Betroffenheit bestimmt, was danach ueberhaupt Sinn hat: solange sie in Pruefung
+  // ist, gibt es nichts zu entscheiden; ist das Produkt nicht betroffen, gibt es nichts
+  // zu beheben. Der Drawer zeigt deshalb je Zustand nur die passenden Felder.
+  const vex = f.vex_status
+  const inPruefung = vex === 'under_investigation'
+  const nichtBetroffen = vex === 'not_affected'
+  const behebbar = vex === 'affected' || vex === 'fixed'
+  const vexHinweis = {
+    under_investigation: 'Die Betroffenheit ist noch nicht bewertet. Entscheidung und Behebung folgen danach.',
+    affected: 'Das Produkt ist angreifbar. Erforderlich sind eine Entscheidung und ihre Begründung.',
+    not_affected: 'Das Produkt ist nicht angreifbar. Die Begründung ist Pflichtangabe.',
+    fixed: 'Die Schwachstelle ist behoben. Der Sicherheitshinweis kann als Entwurf erzeugt werden.',
+  }[vex]
+  // Wechsel auf "nicht betroffen": Entscheidung und Zielversion verlieren ihre Grundlage.
+  const setVex = v => apply(v === 'not_affected'
+    ? { vex_status: v, decision: '', decision_rationale: '', accept_until: '', fix_version: '' }
+    : { vex_status: v })
   const advisory = () => {
     // Advisory-Entwurf (Anhang I Teil II Nr. 4) — Entwurf herunterladen; veröffentlichen muss der Hersteller.
     const md = [
@@ -526,15 +544,17 @@ function FindingDrawer({ finding, onClose }) {
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span className="muted">{t('Behoben in:')}</span>
               {f.fixed_versions.split(', ').map(v => (
-                <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '') + (v === empfohlen ? ' empfohlen' : '')}
-                  title={f.fix_version === v ? t('Zielversion entfernen')
-                    : v === empfohlen ? t('Empfohlen — kleinster Sprung im gleichen Versionszweig')
-                      : t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
-                  onClick={() => apply(f.fix_version === v
-                    ? { fix_version: '' }
-                    : { fix_version: v, decision: f.decision || 'fix_now' })}>
-                  {f.component_name} {v}
-                </button>
+                behebbar
+                  ? <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '') + (v === empfohlen ? ' empfohlen' : '')}
+                      title={f.fix_version === v ? t('Zielversion entfernen')
+                        : v === empfohlen ? t('Empfohlen — kleinster Sprung im gleichen Versionszweig')
+                          : t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
+                      onClick={() => apply(f.fix_version === v
+                        ? { fix_version: '' }
+                        : { fix_version: v, decision: f.decision || 'fix_now' })}>
+                      {f.component_name} {v}
+                    </button>
+                  : <span key={v} className={'chip' + (v === empfohlen ? ' blue' : '')}>{f.component_name} {v}</span>
               ))}
               {f.fix_version && <Pill kind="blue">{t('Zielversion:')} {f.fix_version}</Pill>}
             </div>
@@ -564,27 +584,36 @@ function FindingDrawer({ finding, onClose }) {
       <div className="fieldlab">{t('Betroffenheit')}<HelpDot text={t('Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus. Hier wird festgehalten, ob es tatsächlich angreifbar ist.')} /></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {VEX_STATI.map(([v, label]) => (
-          <span key={v} className={'tabpill' + (f.vex_status === v ? ' active' : '')} onClick={() => set('vex_status', v)}>{t(label)}</span>
+          <span key={v} className={'tabpill' + (vex === v ? ' active' : '')} onClick={() => setVex(v)}>{t(label)}</span>
         ))}
       </div>
+      <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>{t(vexHinweis)}</div>
+
       <div className="fieldlab">{t('Begründung der Betroffenheit')}</div>
       <textarea className="field" rows={2} value={f.vex_justification}
-        placeholder={f.vex_status === 'not_affected' ? t('z. B. die verwundbare Funktion wird bei uns nie aufgerufen') : t('Einschätzung, Analyse-Stand')}
+        placeholder={nichtBetroffen ? t('z. B. die verwundbare Funktion wird bei uns nie aufgerufen') : t('Einschätzung, Analyse-Stand')}
         onChange={e => set('vex_justification', e.target.value, { debounce: true })} />
-
-      <div className="fieldlab">{t('Entscheidung')}</div>
-      <div style={{ display: 'flex', gap: 12 }}>
-        <select className="field" style={{ flex: 1 }} value={f.decision} onChange={e => set('decision', e.target.value)}>
-          {DECISIONS.map(([v, label]) => <option key={v} value={v}>{t(label)}</option>)}
-        </select>
-        {f.decision === 'accept' && (
-          <input type="date" className="field" style={{ flex: 1 }} value={f.accept_until} onChange={e => set('accept_until', e.target.value)} title={t('Befristung')} />
-        )}
-      </div>
-      {(f.decision === 'accept' || f.decision === 'defer') && (
-        <textarea className="field" rows={2} style={{ marginTop: 8 }} value={f.decision_rationale}
-          placeholder={t('Begründung der Entscheidung')} onChange={e => set('decision_rationale', e.target.value, { debounce: true })} />
+      {nichtBetroffen && !f.vex_justification.trim() && (
+        <div style={{ marginTop: 6 }}><Pill kind="amber">{t('Ohne Begründung ist „Nicht betroffen“ nicht belegt')}</Pill></div>
       )}
+
+      {!nichtBetroffen && <>
+        <div className="fieldlab">{t('Entscheidung')}</div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <select className="field" style={{ flex: 1 }} value={f.decision} disabled={inPruefung}
+            title={inPruefung ? t('Erst nach der Bewertung der Betroffenheit') : undefined}
+            onChange={e => set('decision', e.target.value)}>
+            {DECISIONS.map(([v, label]) => <option key={v} value={v}>{t(label)}</option>)}
+          </select>
+          {f.decision === 'accept' && (
+            <input type="date" className="field" style={{ flex: 1 }} value={f.accept_until} onChange={e => set('accept_until', e.target.value)} title={t('Befristung')} />
+          )}
+        </div>
+        {(f.decision === 'accept' || f.decision === 'defer') && (
+          <textarea className="field" rows={2} style={{ marginTop: 8 }} value={f.decision_rationale}
+            placeholder={t('Begründung der Entscheidung')} onChange={e => set('decision_rationale', e.target.value, { debounce: true })} />
+        )}
+      </>}
 
       <div style={{ display: 'flex', gap: 12 }}>
         <div style={{ flex: 1 }}>
@@ -598,9 +627,11 @@ function FindingDrawer({ finding, onClose }) {
         </div>
       </div>
 
-      <div className="fieldlab">{t('Behebung verfügbar seit')} <span className="fund">{t('(sobald eine Korrektur bereitsteht)')}</span></div>
-      <input type="date" className="field" style={{ maxWidth: 220 }} value={f.mitigation_available_at || ''}
-        onChange={e => set('mitigation_available_at', e.target.value)} />
+      {behebbar && <>
+        <div className="fieldlab">{t('Behebung verfügbar seit')} <span className="fund">{t('(sobald eine Korrektur bereitsteht)')}</span></div>
+        <input type="date" className="field" style={{ maxWidth: 220 }} value={f.mitigation_available_at || ''}
+          onChange={e => set('mitigation_available_at', e.target.value)} />
+      </>}
 
       <div className="fieldlab">{t('Aktiv ausgenutzt')}<HelpDot text={t('Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Der CVSS-Wert ist dafür kein Nachweis.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

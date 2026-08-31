@@ -86,6 +86,16 @@ const EN = {
   'Schwachstelle': 'Vulnerability',
   'Behebung': 'Remediation',
   'Betroffenheit': 'Affected status',
+  'Die Betroffenheit ist noch nicht bewertet. Entscheidung und Behebung folgen danach.':
+    'The affected status has not been assessed yet. Decision and remediation follow after that.',
+  'Das Produkt ist angreifbar. Erforderlich sind eine Entscheidung und ihre Begründung.':
+    'The product is exposed. A decision and its rationale are required.',
+  'Das Produkt ist nicht angreifbar. Die Begründung ist Pflichtangabe.':
+    'The product is not exposed. The rationale is a required entry.',
+  'Die Schwachstelle ist behoben. Der Sicherheitshinweis kann als Entwurf erzeugt werden.':
+    'The vulnerability is fixed. The security advisory can be produced as a draft.',
+  'Ohne Begründung ist „Nicht betroffen“ nicht belegt': '“Not affected” is not substantiated without a rationale',
+  'Erst nach der Bewertung der Betroffenheit': 'Available once the affected status is assessed',
   'Entscheidung': 'Decision',
   'Verantwortlich': 'Owner',
   'keine Behebung': 'no fix available',
