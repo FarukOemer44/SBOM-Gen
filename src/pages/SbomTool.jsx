@@ -400,13 +400,15 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
       </>}
 
       {!isOwn && <>
-        <div className="fieldlab">{t('Lieferant geprüft')}<HelpDot text={t('Welche Prüfung erfolgte vor dem Einbau der Komponente? Pflicht für alle selbst ausgewählten Komponenten.')} /></div>
+        <div className="fieldlab">{t('Sorgfalt')}<HelpDot text={t('Vor dem Einbau einer fremden Komponente ist zu prüfen, dass sie die Sicherheit des Produkts nicht gefährdet — quelloffene Software eingeschlossen. Die Pflicht gilt für Hardware, Zukauf und direkt eingebundene Pakete; transitive Pakete wählt niemand aus.')} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <Toggle on={f.dd_status === 'geprueft'} onChange={v => set('dd_status', v ? 'geprueft' : 'offen')} />
           {f.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
         </div>
         <textarea className="field" rows={3} value={f.dd_note} onChange={e => set('dd_note', e.target.value, { debounce: true })}
-          placeholder={t('z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor')} />
+          placeholder={f.kind === 'software_oss'
+            ? t('z. B. Projekt wird aktiv gepflegt, veröffentlicht Sicherheitsmeldungen, beim Einbau keine offenen Funde')
+            : t('z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor')} />
       </>}
 
       {comp && !isHw && <DependencyPath componentId={comp.id} componentName={f.name} ziel={null} />}
@@ -630,9 +632,6 @@ function SbomDrawer({ sbom, onClose }) {
         <CloseX onClick={onClose} />
       </div>
       <div className="dsub">{sbom.component_count} {t('Komponenten · erstellt')} {sbom.generated_at ? fmtDT(sbom.generated_at) : '—'} {t('· importiert')} {fmtDT(sbom.imported_at)} · {(sbom.bytes / 1024).toFixed(1)} KB</div>
-
-      <div className="fieldlab">{t('Tiefe')}<HelpDot text={t('Vorgeschrieben sind mindestens die direkten Abhängigkeiten. Ob die Datei darüber hinausgeht, wird beim Import aus dem Abhängigkeitsbaum abgelesen.')} /></div>
-      <div>{sbom.depth === 'top_level' ? t('Nur direkte Abhängigkeiten') : t('Alle Abhängigkeiten')}</div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
         <button className="hb" style={{ color: '#DC2626', marginRight: 'auto' }} onClick={del}>{t('Löschen')}</button>
@@ -1223,7 +1222,7 @@ export default function SbomTool() {
           <div className="s">{hw} {t('Hardware ·')} {components.length - hw} {t('Software (SBOM)')}</div>
         </div>
         <div className="kpi">
-          <div className="l">{t('Lieferanten geprüft')}</div>
+          <div className="l">{t('Sorgfalt')}</div>
           <div className="v">{geprueft}<span style={{ fontSize: 13, fontWeight: 500, color: '#8B95A3' }}> / {ddPool.length}</span></div>
           <div className="progress" style={{ marginTop: 7 }}><div style={{ width: (ddPool.length ? geprueft / ddPool.length * 100 : 0) + '%', background: '#27AE60' }} /></div>
           <div className="s">{t('von den selbst ausgewählten Komponenten')}</div>
@@ -1311,19 +1310,18 @@ export default function SbomTool() {
         </div>
         <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
-            <thead><tr><th style={{ width: '30%' }}>{t('Datei')}</th><th>{t('Format')}</th><th>{t('Tiefe')}</th><th>{t('Erstellt')}</th><th>{t('Importiert')}</th><th>{t('Komponenten')}</th></tr></thead>
+            <thead><tr><th style={{ width: '30%' }}>{t('Datei')}</th><th>{t('Format')}</th><th>{t('Erstellt')}</th><th>{t('Importiert')}</th><th>{t('Komponenten')}</th></tr></thead>
             <tbody>
               {sboms.map(s => (
                 <tr key={s.id} className="row" onClick={() => setSbomOpen(s)}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{s.file_name}</span></td>
                   <td><Pill kind="blue">{s.format}</Pill></td>
-                  <td>{s.depth === 'top_level' ? t('Nur direkte Abhängigkeiten') : t('Alle Abhängigkeiten')}</td>
                   <td>{s.generated_at ? fmtD(s.generated_at) : '—'}</td>
                   <td>{fmtD(s.imported_at)}</td>
                   <td>{s.component_count}</td>
                 </tr>
               ))}
-              {!sboms.length && <tr><td colSpan={6} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
+              {!sboms.length && <tr><td colSpan={5} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
                 {t('Noch keine SBOM für')} {product?.name} {version?.version}</td></tr>}
             </tbody>
           </table>

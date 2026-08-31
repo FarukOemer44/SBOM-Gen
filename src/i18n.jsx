@@ -23,7 +23,6 @@ const EN = {
   // --- Kennzahlen ---
   'Hardware ·': 'hardware ·',
   'Software (SBOM)': 'software (SBOM)',
-  'Lieferanten geprüft': 'Suppliers reviewed',
   'von den selbst ausgewählten Komponenten': 'of the components selected in-house',
   'Funde insgesamt': 'Findings total',
   'kritisch ·': 'critical ·',
@@ -72,13 +71,16 @@ const EN = {
   'Lizenz': 'License',
   'Schwachstellen': 'Vulnerabilities',
   'Sorgfalt': 'Due diligence',
+  'Vor dem Einbau einer fremden Komponente ist zu prüfen, dass sie die Sicherheit des Produkts nicht gefährdet — quelloffene Software eingeschlossen. Die Pflicht gilt für Hardware, Zukauf und direkt eingebundene Pakete; transitive Pakete wählt niemand aus.':
+    'Before a third-party component is built in, it has to be checked that it does not compromise the security of the product — open-source software included. The duty covers hardware, purchased software and direct dependencies; nobody selects transitive packages.',
+  'z. B. Projekt wird aktiv gepflegt, veröffentlicht Sicherheitsmeldungen, beim Einbau keine offenen Funde':
+    'e.g. project is actively maintained, publishes security advisories, no open findings at integration time',
   'Geprüft': 'Reviewed',
   'Offen': 'Open',
   'entfällt': 'not applicable',
   'Kernfunktion': 'core function',
   'Datei': 'File',
   'Format': 'Format',
-  'Tiefe': 'Depth',
   'Erstellt': 'Generated',
   'Importiert': 'Imported',
   'Schwere': 'Severity',
@@ -229,10 +231,6 @@ const EN = {
   // --- Fund erfassen ---
 
   // --- SBOM-Drawer ---
-  'Nur direkte Abhängigkeiten': 'Direct dependencies only',
-  'Vorgeschrieben sind mindestens die direkten Abhängigkeiten. Ob die Datei darüber hinausgeht, wird beim Import aus dem Abhängigkeitsbaum abgelesen.':
-    'At least the direct dependencies are required. Whether the file goes further is read from the dependency tree on import.',
-  'Alle Abhängigkeiten': 'All dependencies',
   'SBOM-Stand löschen? (Komponenten bleiben im Inventar)': 'Delete this SBOM snapshot? (components stay in the inventory)',
   'Komponenten · erstellt': 'components · generated',
   '· importiert': '· imported',
@@ -278,7 +276,6 @@ const EN = {
   'Bericht': 'Report page',
   'Projekt': 'Project',
   'Kernfunktion des Produkts': 'Core function of the product',
-  'Lieferant geprüft': 'Supplier reviewed',
   'Keine Komponenten für diesen Filter.': 'No components match this filter.',
   'Keine Funde für diesen Filter.': 'No findings match this filter.',
   'Keine Treffer für die Suche.': 'No matches for this search.',
@@ -328,8 +325,6 @@ const EN = {
     'The unique ID of the package. The check uses it to find vulnerabilities — without it the component stays unchecked.',
   'Ist das Produkt durch diese Schwachstelle angreifbar? Nicht jede Schwachstelle in einer Komponente wirkt sich auf das Produkt aus.':
     'Is the product exposed to this vulnerability? Not every vulnerability in a component affects the product.',
-  'Welche Prüfung erfolgte vor dem Einbau der Komponente? Pflicht für alle selbst ausgewählten Komponenten.':
-    'What was checked before the component was built in? Required for every component selected in-house.',
   'Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Der CVSS-Wert ist dafür kein Nachweis.':
     'There is solid evidence that the vulnerability is actually being attacked. The CVSS score is not evidence of this.',
   'Ohne diese Komponente erfüllt das Produkt seinen Zweck nicht mehr. Dann ist der Unterstützungszeitraum des Lieferanten beim eigenen zu berücksichtigen.':
