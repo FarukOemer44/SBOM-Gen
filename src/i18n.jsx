@@ -178,6 +178,14 @@ const EN = {
   'Produkt': 'Product',
   'Produkt → direkt eingebunden → … → verwundbare Komponente':
     'product → direct dependency → … → vulnerable component',
+  'Eingebaut ist': 'Installed is',
+  'behoben ab': 'fixed from',
+  'steht nicht in der package.json und lässt sich nicht einzeln austauschen.':
+    'is not listed in package.json and cannot be replaced on its own.',
+  'Nötig ist eine Fassung von': 'What you need is a release of',
+  'die': 'that ships',
+  'oder neuer mitbringt.': 'or newer.',
+  'Ansatzpunkt ist die direkte Abhängigkeit': 'The place to start is the direct dependency',
   'Name': 'Name',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',
   '— entfällt bei Eigenentwicklung': '— not applicable for in-house development',

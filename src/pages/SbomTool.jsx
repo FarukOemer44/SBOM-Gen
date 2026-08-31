@@ -45,6 +45,26 @@ const INTAKE = [
 ]
 const intakeLabel = v => (INTAKE.find(x => x[0] === v) || [v, v])[1]
 
+// Aus der Liste der behobenen Versionen die passende Zielversion waehlen. Advisories
+// nennen oft mehrere Wartungszweige (6.10.3, 6.9.7, 6.7.3 …). Fuer ein eingebautes
+// 6.7.0 ist 6.7.3 die richtige Antwort — der kleinste Sprung im selben Zweig.
+const verTeile = v => String(v || '').split('.').map(x => parseInt(x, 10) || 0)
+const verGroesser = (a, b) => {
+  const A = verTeile(a), B = verTeile(b)
+  for (let k = 0; k < 3; k++) if ((A[k] || 0) !== (B[k] || 0)) return (A[k] || 0) > (B[k] || 0)
+  return false
+}
+function empfohleneFixVersion(installiert, fixListe) {
+  const liste = (fixListe || []).map(x => x.trim()).filter(Boolean)
+  if (!installiert || !liste.length) return null
+  const groesser = liste.filter(f => verGroesser(f, installiert))
+  if (!groesser.length) return null
+  const i = verTeile(installiert)
+  const zweig = groesser.filter(f => verTeile(f)[0] === i[0] && verTeile(f)[1] === i[1])
+  const kandidaten = zweig.length ? zweig : groesser
+  return kandidaten.sort((a, b) => (verGroesser(a, b) ? 1 : verGroesser(b, a) ? -1 : 0))[0]
+}
+
 // SBOM-Datei lesen und in eine Version importieren — genutzt von Produkt- und Versionsdialog.
 async function importSbomInto(versionId, file, call, t) {
   const text = await file.text()
@@ -402,7 +422,14 @@ function FindingDrawer({ finding, onClose }) {
       </div>
 
       {/* Behebung und Quellen — automatisch beim Abgleich aus OSV übernommen */}
-      <div className="fieldlab">{t('Behebung')} <span className="fund">(aus dem Advisory, {'affected[].ranges'})</span></div>
+      <div className="fieldlab">{t('Behebung')}</div>
+      {f.component_version && (
+        <div className="muted" style={{ marginBottom: 8, lineHeight: 1.6 }}>
+          {t('Eingebaut ist')} <b>{f.component_name} {f.component_version}</b>
+          {empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', ').filter(Boolean))
+            && <> · {t('behoben ab')} <b style={{ color: '#27AE60' }}>{f.component_name} {empfohleneFixVersion(f.component_version, f.fixed_versions.split(', '))}</b></>}
+        </div>
+      )}
       {f.fixed_versions
         ? (f.fixed_versions.startsWith('kein Fix')
             ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Pill kind="red">{t('Keine feste Version')}</Pill>
@@ -410,7 +437,8 @@ function FindingDrawer({ finding, onClose }) {
             : <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span className="muted">{t('Behoben in:')}</span>
                 {f.fixed_versions.split(', ').map(v => (
-                  <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')}
+                  <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')
+                    + (v === empfohleneFixVersion(f.component_version, f.fixed_versions.split(', ')) ? ' empfohlen' : '')}
                     style={f.fix_version === v ? { borderColor: '#1298ff', color: '#1298ff' } : {}}
                     title={t('Als Zielversion uebernehmen und Entscheidung auf Sofort beheben setzen')}
                     onClick={() => setF(x => ({ ...x, fix_version: v, decision: x.decision || 'fix_now' }))}>
@@ -421,7 +449,8 @@ function FindingDrawer({ finding, onClose }) {
               </div>)
         : <span className="muted">{t('Keine Versionsangabe im Advisory.')}</span>}
 
-      <DependencyPath componentId={f.component_id} componentName={f.component_name} />
+      <DependencyPath componentId={f.component_id} componentName={f.component_name}
+        ziel={empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', '))} />
 
       {f.refs_json && (() => {
         let refs = []
@@ -618,7 +647,7 @@ function DiffTab({ versionLabel }) {
 }
 
 // ---------- Woher kommt eine transitive Komponente? ----------
-function DependencyPath({ componentId, componentName }) {
+function DependencyPath({ componentId, componentName, ziel }) {
   const t = useT()
   const { product } = useStore()
   const [pfad, setPfad] = useState(undefined)   // undefined = laedt, null = keiner
@@ -651,7 +680,10 @@ function DependencyPath({ componentId, componentName }) {
         {t('Produkt → direkt eingebunden → … → verwundbare Komponente')}
       </div>
       <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
-        {t('Nicht behebbar an')} <b>{componentName}</b> {t('selbst — aktualisiert werden muss die direkte Abhängigkeit')} <b>{direkt.name}</b>.
+        <b>{componentName}</b> {t('steht nicht in der package.json und lässt sich nicht einzeln austauschen.')}
+        {ziel
+          ? <> {t('Nötig ist eine Fassung von')} <b>{direkt.name}</b>, {t('die')} <b>{componentName} {ziel}</b> {t('oder neuer mitbringt.')}</>
+          : <> {t('Ansatzpunkt ist die direkte Abhängigkeit')} <b>{direkt.name}</b>.</>}
       </div>
     </>
   )

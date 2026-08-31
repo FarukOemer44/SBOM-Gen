@@ -83,7 +83,12 @@ socket.io-client 2.3.0 → engine.io-client 3.4.4 → xmlhttprequest-ssl 1.5.5
 ```
 
 The finding cannot be fixed on the broken package; the direct dependency to update is
-`socket.io-client`. In the bundled example 38 transitive components carry findings and every one of them resolves to
+`socket.io-client`.
+
+The remediation block above it names the installed version and, out of the several fix versions an
+advisory usually lists across maintenance branches, marks the one that actually applies: for
+`qs 6.7.0` that is `6.7.3`, not `6.10.3`. The two blocks read as one instruction — *what you have,
+what you need, and which dependency gets you there*. In the bundled example 38 transitive components carry findings and every one of them resolves to
 a direct dependency — updating `socket.io` alone clears several at once.
 
 ### One responsible person, not 238 assignments

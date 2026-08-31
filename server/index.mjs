@@ -211,7 +211,8 @@ const versionData = (vid) => ({
   sboms: db.prepare(`SELECT id, version_id, file_name, format, depth, generated_at, imported_at,
     provided_to_users, access_location, component_count, length(content) AS bytes
     FROM sboms WHERE version_id = ? ORDER BY imported_at DESC`).all(vid),
-  findings: db.prepare(`SELECT f.*, c.name AS component_name, c.purl AS component_purl
+  findings: db.prepare(`SELECT f.*, c.name AS component_name, c.purl AS component_purl,
+    c.version AS component_version, c.is_direct AS component_is_direct
     FROM findings f LEFT JOIN components c ON c.id = f.component_id
     WHERE f.version_id = ? ORDER BY
       CASE f.severity WHEN 'KRITISCH' THEN 0 WHEN 'HOCH' THEN 1 WHEN 'MITTEL' THEN 2 WHEN 'NIEDRIG' THEN 3 ELSE 4 END,
