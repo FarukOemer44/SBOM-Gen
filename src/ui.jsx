@@ -75,7 +75,11 @@ export const fmtM = (ym) => {
 }
 // purl lesbar machen: %40types → @types, %C3%BC → ü.
 export const pshow = (s) => { try { return decodeURIComponent(String(s)) } catch { return s } }
-// Kleiner Fragezeichen-Kreis: Erklaerung in Alltagssprache beim Darueberfahren (D-037).
+// Kleiner Fragezeichen-Kreis mit eigener Sprechblase (D-037). Kein title-Attribut:
+// das native Tooltip braucht eine Sekunde und wird uebersehen.
 export const HelpDot = ({ text }) => (
-  <span className="helpdot" title={text}>?</span>
+  <span className="helpwrap">
+    <span className="helpdot" role="img" aria-label={text}>?</span>
+    <span className="helptip">{text}</span>
+  </span>
 )

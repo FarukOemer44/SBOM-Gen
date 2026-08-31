@@ -149,8 +149,15 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 .hb.sm.empfohlen { border-color: #27AE60; color: #27AE60; }
 .hb.active { border-color: #1298ff; color: #1298ff; background: rgba(18,152,255,0.06); }
 
-/* Fragezeichen-Kreis: Erklaerung beim Darueberfahren (D-037) */
+/* Fragezeichen-Kreis mit eigener Sprechblase (D-037) */
+.helpwrap { position: relative; display: inline-flex; vertical-align: middle; margin-left: 5px; }
 .helpdot { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
   border-radius: 50%; background: #F1F2F4; color: #69778E; font-size: 10px; font-weight: 700;
-  cursor: help; margin-left: 5px; vertical-align: middle; flex: 0 0 auto; }
-.helpdot:hover { background: rgba(18,152,255,0.09); color: #1298ff; }
+  cursor: help; flex: 0 0 auto; }
+.helpwrap:hover .helpdot { background: rgba(18,152,255,0.09); color: #1298ff; }
+.helptip { position: absolute; top: 100%; left: -6px; margin-top: 6px; width: 280px; max-width: 62vw;
+  background: #fff; border: 1px solid #E3E8F1; border-radius: 10px; padding: 10px 12px;
+  box-shadow: 0 12px 24px rgba(20,20,43,0.08); z-index: 90;
+  font-size: 12px; font-weight: 400; line-height: 1.6; color: #495057; text-align: left; white-space: normal;
+  opacity: 0; visibility: hidden; transition: opacity .15s; pointer-events: none; }
+.helpwrap:hover .helptip { opacity: 1; visibility: visible; }

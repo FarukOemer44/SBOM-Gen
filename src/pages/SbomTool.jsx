@@ -372,7 +372,7 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
         )}
       </>}
 
-      <div className="fieldlab">{t('Kernfunktion des Produkts?')}<HelpDot text={t('Ohne diese Komponente tut das Produkt nicht mehr, wofür es gebaut ist. Dann zählt der Unterstützungszeitraum des Lieferanten für euren mit.')} /></div>
+      <div className="fieldlab">{t('Kernfunktion des Produkts')}<HelpDot text={t('Ohne diese Komponente tut das Produkt nicht mehr, wofür es gebaut ist. Dann zählt der Unterstützungszeitraum des Lieferanten für euren mit.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle on={!!f.is_core_function} onChange={v => set('is_core_function', v ? 1 : 0)} />
         <span className="muted">{f.is_core_function ? t('Ja — Unterstützungszeitraum des Lieferanten zählt mit') : t('Nein')}</span>
@@ -398,7 +398,7 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
       </>}
 
       {!isOwn && <>
-        <div className="fieldlab">{t('Lieferant geprüft?')}<HelpDot text={t('Was habt ihr geprüft, bevor ihr die Komponente eingebaut habt? Pflicht für alles, was ihr selbst ausgewählt habt.')} /></div>
+        <div className="fieldlab">{t('Lieferant geprüft')}<HelpDot text={t('Was habt ihr geprüft, bevor ihr die Komponente eingebaut habt? Pflicht für alles, was ihr selbst ausgewählt habt.')} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <Toggle on={f.dd_status === 'geprueft'} onChange={v => set('dd_status', v ? 'geprueft' : 'offen')} />
           {f.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
@@ -584,7 +584,7 @@ function FindingDrawer({ finding, onClose }) {
       <input type="date" className="field" style={{ maxWidth: 220 }} value={f.mitigation_available_at || ''}
         onChange={e => set('mitigation_available_at', e.target.value)} />
 
-      <div className="fieldlab">{t('Aktiv ausgenutzt?')}<HelpDot text={t('Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Nie aus dem CVSS-Wert ableiten.')} /></div>
+      <div className="fieldlab">{t('Aktiv ausgenutzt')}<HelpDot text={t('Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Nie aus dem CVSS-Wert ableiten.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle on={!!f.actively_exploited} onChange={v => set('actively_exploited', v ? 1 : 0)} />
         <span className="muted">{f.actively_exploited ? t('Ja — verlässliche Nachweise erforderlich') : t('Nein / keine Nachweise')}</span>
@@ -940,7 +940,7 @@ function ScanHistoryModal({ scans, onClose }) {
   return (
     <Modal onClose={onClose} width={620}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <span className="dtitle" style={{ flex: 1 }}>{t('Frühere Prüfungen')}</span><CloseX onClick={onClose} />
+        <span className="dtitle" style={{ flex: 1 }}>{t('Prüfverlauf')}</span><CloseX onClick={onClose} />
       </div>
       <div className="dsub">{t('Hier steht jede Prüfung: wann sie lief, wie viele Komponenten geprüft wurden und was sie gefunden hat.')}</div>
       {scans.length ? (
@@ -1208,7 +1208,7 @@ export default function SbomTool() {
           title={!components.some(c => c.purl && c.kind !== 'hardware') ? t('Erst möglich, wenn Software mit purl im Inventar steht') : undefined}>
           {busy ? t('Bitte warten …') : t('Auf Schwachstellen prüfen')}
         </button>
-        <button className="hb" onClick={() => setModal('scans')} disabled={!version}>{t('Frühere Prüfungen')}</button>
+        <button className="hb" onClick={() => setModal('scans')} disabled={!version}>{t('Prüfverlauf')}</button>
         <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }}
           onChange={e => { if (e.target.files[0]) importSbom(e.target.files[0]); e.target.value = '' }} />
       </TitleBar>
@@ -1222,7 +1222,6 @@ export default function SbomTool() {
         <VersionPicker />
         <OwnerPicker />
         <button className="hb sm" onClick={() => setModal('version')}>{t('+ Version')}</button>
-        <button className="hb sm" onClick={() => setModal('produkt')}>{t('+ Produkt')}</button>
         <span style={{ flex: 1 }} />
         {scanBanner && <Pill kind="green">{t('Prüfung fertig —')} {scanBanner.scanned} {t('Komponenten geprüft ·')} {scanBanner.added} {t('neue Funde ·')} {scanBanner.updated} {t('aktualisierte Funde')}</Pill>}
         {!scanBanner && lastScan && <span className="muted">{t('Letzte Prüfung:')} {fmtDT(lastScan.ran_at)} · {lastScan.source} · {lastScan.components_scanned} {t('Komponenten geprüft')}</span>}
@@ -1289,7 +1288,7 @@ export default function SbomTool() {
                     <td>
                       <span style={{ display: 'block', fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
                       <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
-                        {c.purl ? pshow(c.purl) : c.cpe || (c.kind === 'hardware' ? t('Hardware — kein automatischer Abgleich') : t('ohne Paket-Kennung — wird bei der Prüfung übersprungen'))}
+                        {c.purl ? pshow(c.purl) : c.cpe || (c.kind === 'hardware' ? '' : t('ohne Paket-Kennung — wird bei der Prüfung übersprungen'))}
                       </span>
                     </td>
                     <td><Pill kind={kindColor}>{t(kindLabel)}</Pill></td>
@@ -1297,7 +1296,7 @@ export default function SbomTool() {
 
                     <td>
                       {fs.length === 0
-                        ? <span className="muted">{c.kind === 'hardware' ? t('prüfen wir nicht automatisch') : t('keine bekannt')}</span>
+                        ? <span className="muted">{t('keine bekannt')}</span>
                         : <span style={{ display: 'inline-flex', gap: 5 }}>
                             {SEVS.map(([k, lbl, col]) => grp[k] ? <span key={k} className="sevbadge" style={{ background: col }} title={t(lbl)}>{grp[k]}</span> : null)}
                           </span>}
@@ -1365,7 +1364,7 @@ export default function SbomTool() {
                   <td>{f.component_name || '—'}{f.component_version ? <span className="muted" style={{ marginLeft: 5 }}>{f.component_version}</span> : null}</td>
                   <td>
                     {f.fix_version
-                      ? <Pill kind="blue">→ {f.fix_version}</Pill>
+                      ? <Pill kind="blue" title={t('Gewählte Zielversion')}>{t('auf')} {f.fix_version}</Pill>
                       : f.fix_status === 'none'
                         ? <Pill kind="red">{t('keine Behebung')}</Pill>
                         : f.fixed_versions

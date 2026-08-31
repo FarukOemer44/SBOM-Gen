@@ -122,7 +122,6 @@ const EN = {
     'Every version keeps its own components, SBOMs and findings.',
   'Noch kein Produkt angelegt': 'No product yet',
   'Version löschen': 'Delete version',
-  'Produkt löschen': 'Delete product',
 
   // --- Komponenten-Drawer ---
   'Die Zusammensetzung wird je Version geführt.': 'Composition is tracked per version.',
@@ -140,7 +139,7 @@ const EN = {
   'Nachweis: worauf stützt sich die Einstufung?': 'Evidence: what is this assessment based on?',
   'Version löschen?': 'Delete version?',
   'Gespeichert': 'Saved',
-  'Frühere Prüfungen': 'Previous checks',
+  'Prüfverlauf': 'Check history',
   'Hier steht jede Prüfung: wann sie lief, wie viele Komponenten geprüft wurden und was sie gefunden hat.':
     'Every check is listed here: when it ran, how many components were checked and what it found.',
   'Zeitpunkt': 'When',
@@ -204,8 +203,6 @@ const EN = {
   'Paket-Kennung (purl)': 'Package ID (purl)',
   'Hardware-Kennung (cpe)': 'Hardware ID (cpe)',
   '— wird nur festgehalten, nicht bewertet': '— recorded only, not assessed',
-  'Kernfunktion des Produkts?': 'Core function of the product?',
-  'Lieferant geprüft?': 'Supplier reviewed?',
   'z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor':
     'e.g. the supplier’s security contact and update commitments are on file',
   'Komponente löschen? Zugehörige Funde werden mit entfernt.': 'Delete this component? Its findings are removed with it.',
@@ -226,7 +223,6 @@ const EN = {
   'Bis wann gilt das?': 'Until when does this apply?',
   'Warum diese Entscheidung?': 'Why this decision?',
   'Bekannt seit': 'Known since',
-  'Aktiv ausgenutzt?': 'Actively exploited?',
   'Nein / keine Nachweise': 'No / no evidence',
   'Meldung an den Komponenten-Hersteller': 'Report to the component manufacturer',
   'Gemeldet an — Projekt oder Lieferant': 'Reported to — project or supplier',
@@ -273,9 +269,11 @@ const EN = {
   'betroffen bis': 'affected up to',
   'bis': 'until',
   'keine bekannt': 'none known',
-  'prüfen wir nicht automatisch': 'not checked automatically',
-  'Hardware — kein automatischer Abgleich': 'hardware — no automatic check',
   'ohne Paket-Kennung — wird bei der Prüfung übersprungen': 'no package ID — skipped by the check',
+  'auf': 'to',
+  'Gewählte Zielversion': 'Chosen target version',
+  'Kernfunktion des Produkts': 'Core function of the product',
+  'Lieferant geprüft': 'Supplier reviewed',
   'Keine Komponenten für diesen Filter.': 'No components match this filter.',
   'Keine Funde für diesen Filter.': 'No findings match this filter.',
   'Keine Treffer für die Suche.': 'No matches for this search.',
@@ -286,7 +284,6 @@ const EN = {
   'Erst möglich, wenn Software mit purl im Inventar steht': 'Available once the inventory has software with a package ID (purl)',
   'Erst möglich, wenn eine Datei gewählt ist': 'Available once a file is chosen',
   '+ Komponente': '+ Component',
-  '+ Produkt': '+ Product',
   '+ Fund erfassen': '+ Record finding',
   'Fund erfassen': 'Record a finding',
   'Software kommt über den SBOM-Import; Hardware und Zukauf legst du hier an.':
