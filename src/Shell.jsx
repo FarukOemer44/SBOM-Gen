@@ -26,10 +26,10 @@ export default function Shell({ children }) {
         </nav>
         <div className="nav-footer">
           <div className="nl" style={{ padding: '4px 10px', pointerEvents: 'none' }}>
-            <span className="lab" style={{ fontSize: 11, color: dbStatus === 'SQLite' ? '#3EC556' : '#F5A623' }}>● {t('Datenbank:')} {t(dbStatus) === dbStatus ? dbStatus : t(dbStatus)}</span>
+            <span className="lab" style={{ fontSize: 11, color: dbStatus === 'SQLite' ? '#3EC556' : '#F5A623' }}>● {dbStatus === 'SQLite' ? t('Daten gespeichert') : dbStatus === 'lädt' ? t('verbinde …') : t('keine Verbindung')}</span>
           </div>
           <div className="nl" style={{ padding: '4px 10px', pointerEvents: 'none' }}>
-            <span className="lab" style={{ fontSize: 11, color: '#B6C1CD' }}>{t('CRA-Modul · SBOM-Gen')}</span>
+            <span className="lab" style={{ fontSize: 11, color: '#B6C1CD' }}>{t('CRA-Modul')}</span>
           </div>
           <div className="seg" style={{ margin: '10px 0 0', height: 32 }} role="group" aria-label="Sprache / Language">
             {[['de', 'Deutsch'], ['en', 'English']].map(([code, label]) => (

@@ -111,6 +111,8 @@ for (const [col, ddl] of [
   ['owner', "TEXT DEFAULT ''"],
   // Art. 13 Abs. 19: Enddatum mindestens mit Monat und Jahr angeben (YYYY-MM).
   ['support_until', "TEXT DEFAULT ''"],
+  // Art. 13 Abs. 8: die Fuenfjahrespruefung rechnet ab dem Inverkehrbringen, nicht ab heute.
+  ['placed_on_market', "TEXT DEFAULT ''"],
 ]) {
   const has = db.prepare('PRAGMA table_info(products)').all().some(c => c.name === col)
   if (!has) db.exec(`ALTER TABLE products ADD COLUMN ${col} ${ddl}`)
@@ -120,7 +122,11 @@ for (const [col, ddl] of [
   ['aliases', "TEXT DEFAULT ''"],          // CVE-Nummern zur OSV-/GHSA-ID
   ['cwe_ids', "TEXT DEFAULT ''"],          // Schwachstellenklassen
   ['published', "TEXT DEFAULT ''"],        // Veroeffentlichung des Advisories
-  ['fixed_versions', "TEXT DEFAULT ''"],   // Behebung: Versionen aus affected[].ranges
+  ['fixed_versions', "TEXT DEFAULT ''"],   // Behebung: nur echte Versionsnummern
+  ['fix_status', "TEXT DEFAULT ''"],       // '' | 'fix' | 'none' — Zustand als Code, nie als Fliesstext
+  ['last_affected', "TEXT DEFAULT ''"],    // betroffen bis …, wenn keine Behebung existiert
+  ['cvss_vector', "TEXT DEFAULT ''"],      // der Vektor hinter dem Score — Nachvollziehbarkeit
+  ['mitigation_available_at', "TEXT DEFAULT ''"], // Art. 14 Abs. 2 Buchst. c: zweiter Fristanker, nur erfasst
   ['refs_json', "TEXT DEFAULT ''"],        // Advisory-Links (GitHub, NVD, OSV, Hersteller)
   ['fix_version', "TEXT DEFAULT ''"],      // vom Bearbeiter gewaehlte Zielversion
 ]) {
@@ -132,6 +138,38 @@ const uid = () => crypto.randomBytes(8).toString('hex')
 const now = () => new Date().toISOString()
 const audit = (action, detail = '') =>
   db.prepare('INSERT INTO audit_log (ts, action, detail) VALUES (?, ?, ?)').run(now(), action, String(detail).slice(0, 400))
+
+// Loeschungen ziehen ihre Funde mit — ohne dieses Pragma prueft SQLite die
+// ON-DELETE-CASCADE-Regeln nicht.
+db.pragma('foreign_keys = ON')
+
+// ---------- Altbestand nachziehen ----------
+// 1) 'kein Fix — betroffen bis X' stand als deutscher Fliesstext in einem Versionsfeld
+//    und gewann dadurch den Versionsvergleich. Jetzt: Code + eigenes Feld.
+db.exec(`UPDATE findings SET fix_status='none', last_affected=substr(fixed_versions, 26), fixed_versions=''
+  WHERE fixed_versions LIKE 'kein Fix — betroffen bis %'`)
+db.exec(`UPDATE findings SET fix_status='fix' WHERE fixed_versions != '' AND fix_status = ''`)
+// 2) Komponenten-Dubletten (dieselbe purl mehrfach je Version): Funde auf den aeltesten
+//    Eintrag umziehen, Rest loeschen, dann per Index dauerhaft verhindern.
+db.transaction(() => {
+  const groups = db.prepare(`SELECT version_id, purl, MIN(rowid) AS keepRow, COUNT(*) AS n
+    FROM components WHERE purl != '' GROUP BY version_id, purl HAVING n > 1`).all()
+  let bereinigt = 0
+  for (const g of groups) {
+    const keep = db.prepare('SELECT id FROM components WHERE rowid = ?').get(g.keepRow)
+    for (const d of db.prepare('SELECT id FROM components WHERE version_id=? AND purl=? AND id != ?').all(g.version_id, g.purl, keep.id)) {
+      db.prepare('UPDATE findings SET component_id=? WHERE component_id=?').run(keep.id, d.id)
+      db.prepare('DELETE FROM components WHERE id=?').run(d.id)
+      bereinigt++
+    }
+  }
+  // Nach dem Umzug: dieselbe Schwachstelle je Komponente nur einmal
+  db.exec(`DELETE FROM findings WHERE rowid NOT IN (SELECT MIN(rowid) FROM findings GROUP BY version_id, vuln_id, component_id)`)
+  // Verwaiste Funde geloeschter Komponenten (aus der Zeit ohne foreign_keys)
+  db.exec(`DELETE FROM findings WHERE component_id IS NOT NULL AND component_id NOT IN (SELECT id FROM components)`)
+  if (bereinigt) audit('db.migrate', 'Komponenten-Dubletten bereinigt: ' + bereinigt)
+})()
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_components_purl ON components(version_id, purl) WHERE purl != ''`)
 
 const app = express()
 app.use(express.json({ limit: '25mb' }))
@@ -156,10 +194,10 @@ app.post('/api/products', (req, res) => {
 app.patch('/api/products/:id', (req, res) => {
   const cur = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id)
   if (!cur) return res.status(404).json({ error: 'Produkt nicht gefunden' })
-  const { name, hersteller, owner, support_until } = req.body
-  db.prepare('UPDATE products SET name=?, hersteller=?, owner=?, support_until=? WHERE id=?')
+  const { name, hersteller, owner, support_until, placed_on_market } = req.body
+  db.prepare('UPDATE products SET name=?, hersteller=?, owner=?, support_until=?, placed_on_market=? WHERE id=?')
     .run(name ?? cur.name, hersteller ?? cur.hersteller, owner ?? cur.owner,
-      support_until ?? cur.support_until, req.params.id)
+      support_until ?? cur.support_until, placed_on_market ?? cur.placed_on_market, req.params.id)
   audit('product.update', (name ?? cur.name) + (owner !== undefined ? ' · verantwortlich: ' + owner : ''))
   res.json({ ok: true })
 })
@@ -251,11 +289,14 @@ app.post('/api/versions/:id/components', (req, res) => {
   const c = req.body
   if (!c.name?.trim()) return res.status(400).json({ error: 'Name fehlt' })
   db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
-    is_direct, is_core_function, dd_status, dd_note, artifact, source, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'manuell', ?)`)
-    .run(uid(), req.params.id, c.kind || 'software_oss', c.name.trim(), c.version || '', c.supplier || '',
+    is_direct, is_core_function, dd_status, dd_note, supplier_address, acquired_at, supplier_support_until,
+    artifact, source, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 'manuell', ?)`)
+    .run(uid(), req.params.id, c.kind || 'hardware', c.name.trim(), c.version || '', c.supplier || '',
       c.purl || '', c.cpe || '', c.license || '', c.is_core_function ? 1 : 0,
-      c.dd_status || 'offen', c.dd_note || '', c.artifact || '', now())
+      c.dd_status || 'offen', c.dd_note || '',
+      c.supplier_address || '', c.acquired_at || '', c.supplier_support_until || '',
+      c.artifact || '', now())
   audit('component.create', c.name)
   res.json(versionData(req.params.id))
 })
@@ -294,9 +335,12 @@ app.post('/api/versions/:id/sboms', (req, res) => {
   // Software-Einträge ins Komponenteninventar übernehmen (Obermenge, Abschnitt 1.6):
   // Abgleich über purl, sonst Name+Version. Typ/Sorgfalt bestehender Einträge bleiben erhalten.
   const existing = db.prepare('SELECT * FROM components WHERE version_id = ?').all(vid)
+  const byKey = new Map(existing.map(e => [e.purl || e.name, e]))
   const ins = db.prepare(`INSERT INTO components (id, version_id, kind, name, version, supplier, purl, cpe, license,
     is_direct, is_core_function, dd_status, dd_note, artifact, source, created_at)
     VALUES (?, ?, 'software_oss', ?, ?, ?, ?, '', ?, ?, 0, 'offen', '', ?, 'sbom_import', ?)`)
+  // Gepflegte Angaben (Lieferant, Lizenz) behalten Vorrang vor der Datei;
+  // is_direct folgt der neuen SBOM statt am alten Stand zu kleben.
   const upd = db.prepare('UPDATE components SET version=?, supplier=?, license=?, is_direct=?, artifact=?, source=? WHERE id=?')
   // Steckt dieselbe Komponente in mehreren Artefakten, werden die Namen gesammelt.
   const mitArtefakt = (bisher, neu) => {
@@ -306,22 +350,41 @@ app.post('/api/versions/:id/sboms', (req, res) => {
     return liste.join(', ')
   }
   let added = 0, updated = 0
+  const seen = new Set()
   for (const c of components) {
+    const key = c.purl || c.name
+    if (seen.has(key)) continue            // dieselbe purl mehrfach in der Datei: eine Inventarzeile
+    seen.add(key)
     const direct = c.is_direct ? 1 : 0
-    const match = existing.find(e => (c.purl && e.purl === c.purl) || (!c.purl && e.name === c.name))
-    if (match) { upd.run(c.version || match.version, c.supplier || match.supplier, c.license || match.license,
-                         direct || match.is_direct, mitArtefakt(match.artifact, artifact), 'sbom_import', match.id); updated++ }
+    const match = byKey.get(key)
+    if (match) { upd.run(c.version || match.version, match.supplier || c.supplier || '', match.license || c.license || '',
+                         direct, mitArtefakt(match.artifact, artifact), 'sbom_import', match.id); updated++ }
     else { ins.run(uid(), vid, c.name, c.version || '', c.supplier || '', c.purl || '', c.license || '', direct,
                    artifact, now()); added++ }
   }
-  // Beziehungen ersetzen: eine neue SBOM beschreibt den Baum vollstaendig neu.
-  if (edges.length) {
-    db.prepare('DELETE FROM component_edges WHERE version_id = ?').run(vid)
-    const insE = db.prepare('INSERT OR IGNORE INTO component_edges (version_id, parent_ref, child_ref) VALUES (?, ?, ?)')
-    db.transaction(list => { for (const e of list) insE.run(vid, e.parent || '', e.child) })(edges)
+  // Aufraeumen: was die neue Datei nicht mehr nennt, fliegt samt Funden raus —
+  // aber nur fuer dieses Artefakt. Andere Artefakte und manuell Angelegtes bleiben.
+  let removed = 0
+  for (const e of existing) {
+    if (e.source !== 'sbom_import' || seen.has(e.purl || e.name)) continue
+    const arts = (e.artifact || '').split(', ').map(x => x.trim()).filter(Boolean)
+    if (artifact && arts.includes(artifact)) {
+      const rest = arts.filter(a => a !== artifact)
+      if (rest.length) db.prepare('UPDATE components SET artifact=? WHERE id=?').run(rest.join(', '), e.id)
+      else { db.prepare('DELETE FROM components WHERE id=?').run(e.id); removed++ }
+    } else if (!artifact && !arts.length) {
+      db.prepare('DELETE FROM components WHERE id=?').run(e.id); removed++
+    }
   }
-  audit('sbom.import', (fileName || '') + ' · +' + added + ' / ~' + updated + ' · ' + edges.length + ' Beziehungen')
-  res.json({ ...versionData(vid), imported: { added, updated } })
+  // Beziehungen: den Teilgraphen dieses Imports erneuern, fremde Artefakte behalten ihre Kanten.
+  db.transaction(() => {
+    const delE = db.prepare('DELETE FROM component_edges WHERE version_id=? AND (parent_ref=? OR child_ref=?)')
+    for (const k of seen) delE.run(vid, k, k)
+    const insE = db.prepare('INSERT OR IGNORE INTO component_edges (version_id, parent_ref, child_ref) VALUES (?, ?, ?)')
+    for (const e of edges) insE.run(vid, e.parent || '', e.child)
+  })()
+  audit('sbom.import', (fileName || '') + ' · +' + added + ' / ~' + updated + ' / -' + removed + ' · ' + edges.length + ' Beziehungen')
+  res.json({ ...versionData(vid), imported: { added, updated, removed } })
 })
 
 app.patch('/api/sboms/:id', (req, res) => {
@@ -371,13 +434,21 @@ function cvss3Score(vec) {
 }
 function sevOf(rec) {
   const MAP = { CRITICAL: 'KRITISCH', HIGH: 'HOCH', MODERATE: 'MITTEL', MEDIUM: 'MITTEL', LOW: 'NIEDRIG' }
-  let score = null
+  let score = null, vector = ''
   for (const sv of rec.severity || []) {
-    if (sv.type === 'CVSS_V3' && sv.score) { const x = cvss3Score(sv.score); if (x != null) score = Math.max(score ?? 0, x) }
+    if (sv.type === 'CVSS_V3' && sv.score) {
+      const x = cvss3Score(sv.score)
+      if (x != null && x >= (score ?? -1)) { score = x; vector = sv.score }
+    } else if (sv.type === 'CVSS_V4' && sv.score && !vector) {
+      vector = sv.score   // Zahlwert fuer CVSS 4.0 noch offen — der Vektor wird festgehalten
+    }
   }
-  let label = MAP[(rec.database_specific?.severity || '').toUpperCase()] || null
-  if (!label && score != null) label = score >= 9 ? 'KRITISCH' : score >= 7 ? 'HOCH' : score >= 4 ? 'MITTEL' : 'NIEDRIG'
-  return { label: label || '—', score }
+  // Liegt ein Zahlenwert vor, bestimmt er das Etikett — sonst koennen sich
+  // Herausgeber-Einstufung und CVSS-Wert auf demselben Bildschirm widersprechen.
+  let label = score != null
+    ? (score >= 9 ? 'KRITISCH' : score >= 7 ? 'HOCH' : score >= 4 ? 'MITTEL' : 'NIEDRIG')
+    : MAP[(rec.database_specific?.severity || '').toUpperCase()] || null
+  return { label: label || '—', score, vector }
 }
 
 // purl ohne Versionsanteil — Schluessel fuer Paketvergleiche
@@ -453,28 +524,30 @@ app.post('/api/versions/:id/scan', async (req, res) => {
     }
     // Upsert: Bewertung immer frisch, Bearbeitungsstand (VEX/Entscheidung/Nachweise) bleibt erhalten
     const existing = db.prepare('SELECT id, vuln_id, component_id FROM findings WHERE version_id = ?').all(vid)
-    const ins = db.prepare(`INSERT INTO findings (id, version_id, component_id, vuln_id, severity, score, summary,
-      aliases, cwe_ids, published, fixed_versions, refs_json,
+    const ins = db.prepare(`INSERT INTO findings (id, version_id, component_id, vuln_id, severity, score, cvss_vector, summary,
+      aliases, cwe_ids, published, fixed_versions, fix_status, last_affected, refs_json,
       intake_channel, became_known_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'osv_scan', ?, ?, ?)`)
-    const upd = db.prepare(`UPDATE findings SET severity=?, score=?, summary=?,
-      aliases=?, cwe_ids=?, published=?, fixed_versions=?, refs_json=?, updated_at=? WHERE id=?`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'osv_scan', ?, ?, ?)`)
+    const upd = db.prepare(`UPDATE findings SET severity=?, score=?, cvss_vector=?, summary=?,
+      aliases=?, cwe_ids=?, published=?, fixed_versions=?, fix_status=?, last_affected=?, refs_json=?, updated_at=? WHERE id=?`)
     let added = 0, updated = 0
     for (const h of hits) {
       const rec = details[h.vulnId]
-      const { label, score } = rec ? sevOf(rec) : { label: '—', score: null }
+      const { label, score, vector } = rec ? sevOf(rec) : { label: '—', score: null, vector: '' }
       const summary = rec?.summary || 'osv.dev/vulnerability/' + h.vulnId
       const aliases = (rec?.aliases || []).join(', ')
       const cwe = (rec?.database_specific?.cwe_ids || []).join(', ')
       const published = rec?.published || ''
       const rem = rec ? remediationOf(rec, h.comp.purl) : { fixed: [], lastAffected: [] }
-      const fixedVersions = rem.fixed.length ? rem.fixed.join(', ')
-        : rem.lastAffected.length ? 'kein Fix — betroffen bis ' + rem.lastAffected.join(', ') : ''
+      // Versionen bleiben Versionen; ob eine Behebung existiert, traegt der Code fix_status.
+      const fixedVersions = rem.fixed.join(', ')
+      const fixStatus = rem.fixed.length ? 'fix' : rem.lastAffected.length ? 'none' : ''
+      const lastAffected = rem.lastAffected.join(', ')
       const refs = rec ? JSON.stringify(sourcesOf(rec)) : ''
       const match = existing.find(e => e.vuln_id === h.vulnId && e.component_id === h.comp.id)
-      if (match) { upd.run(label, score, summary, aliases, cwe, published, fixedVersions, refs, now(), match.id); updated++ }
-      else { ins.run(uid(), vid, h.comp.id, h.vulnId, label, score, summary, aliases, cwe, published,
-                     fixedVersions, refs, now(), now(), now()); added++ }
+      if (match) { upd.run(label, score, vector, summary, aliases, cwe, published, fixedVersions, fixStatus, lastAffected, refs, now(), match.id); updated++ }
+      else { ins.run(uid(), vid, h.comp.id, h.vulnId, label, score, vector, summary, aliases, cwe, published,
+                     fixedVersions, fixStatus, lastAffected, refs, now(), now(), now()); added++ }
     }
     db.prepare('INSERT INTO scans (id, version_id, ran_at, source, components_scanned, findings_new, findings_updated) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(uid(), vid, now(), 'OSV.dev', comps.length, added, updated)
@@ -502,7 +575,7 @@ app.post('/api/versions/:id/findings', (req, res) => {
 
 const FINDING_FIELDS = ['vex_status', 'vex_justification', 'decision', 'decision_rationale', 'accept_until',
   'owner', 'became_known_at', 'actively_exploited', 'exploit_evidence',
-  'upstream_reported_to', 'upstream_reported_at', 'upstream_fix_shared', 'fix_version']
+  'upstream_reported_to', 'upstream_reported_at', 'upstream_fix_shared', 'fix_version', 'mitigation_available_at']
 app.patch('/api/findings/:id', (req, res) => {
   const cur = db.prepare('SELECT * FROM findings WHERE id = ?').get(req.params.id)
   if (!cur) return res.status(404).json({ error: 'nicht gefunden' })
@@ -510,12 +583,16 @@ app.patch('/api/findings/:id', (req, res) => {
   for (const k of FINDING_FIELDS) if (req.body[k] !== undefined) f[k] = req.body[k]
   db.prepare(`UPDATE findings SET vex_status=?, vex_justification=?, decision=?, decision_rationale=?, accept_until=?,
     owner=?, became_known_at=?, actively_exploited=?, exploit_evidence=?,
-    upstream_reported_to=?, upstream_reported_at=?, upstream_fix_shared=?, fix_version=?, updated_at=? WHERE id=?`)
+    upstream_reported_to=?, upstream_reported_at=?, upstream_fix_shared=?, fix_version=?, mitigation_available_at=?, updated_at=? WHERE id=?`)
     .run(f.vex_status, f.vex_justification, f.decision, f.decision_rationale, f.accept_until,
       f.owner, f.became_known_at, f.actively_exploited ? 1 : 0, f.exploit_evidence,
       f.upstream_reported_to, f.upstream_reported_at, f.upstream_fix_shared ? 1 : 0, f.fix_version || '',
-      now(), req.params.id)
-  audit('finding.update', cur.vuln_id)
+      f.mitigation_available_at || '', now(), req.params.id)
+  // Protokoll mit Inhalt: welches Feld, von was, auf was (Art. 13 Abs. 7)
+  const changes = FINDING_FIELDS
+    .filter(k => req.body[k] !== undefined && String(cur[k] ?? '') !== String(req.body[k] ?? ''))
+    .map(k => k + ': "' + String(cur[k] ?? '').slice(0, 40) + '" → "' + String(req.body[k] ?? '').slice(0, 40) + '"')
+  audit('finding.update', cur.vuln_id + (changes.length ? ' · ' + changes.join(' · ') : ''))
   res.json(versionData(cur.version_id))
 })
 
@@ -575,24 +652,38 @@ app.get('/api/versions/:id/diff', (req, res) => {
   ).get(v.product_id, v.created_at)
   if (!base) return res.json({ base: null, added: [], removed: [], changed: [], unchanged: 0 })
 
-  const key = c => (c.purl ? 'p:' + purlBase(c.purl) : 'n:' + c.kind + '|' + c.name.toLowerCase())
-  const cur = db.prepare('SELECT * FROM components WHERE version_id = ?').all(v.id)
-  const prev = db.prepare('SELECT * FROM components WHERE version_id = ?').all(base.id)
-  const prevMap = new Map(prev.map(c => [key(c), c]))
-  const curKeys = new Set(cur.map(key))
+  // Ein npm-Baum fuehrt dasselbe Paket regelmaessig in mehreren Versionen. Der Vergleich
+  // laeuft deshalb ueber die EXAKTE purl: identische Eintraege heben sich auf, erst die
+  // Reste werden paketweise zu "Version geaendert" gepaart. Alles andere erfindet Wechsel.
+  const exact = c => (c.purl ? 'x:' + c.purl : 'n:' + c.kind + '|' + c.name.toLowerCase() + '|' + (c.version || ''))
+  const baseKey = c => (c.purl ? 'p:' + purlBase(c.purl) : 'n:' + c.kind + '|' + c.name.toLowerCase())
+  const uniq = rows => { const m = new Map(); for (const c of rows) if (!m.has(exact(c))) m.set(exact(c), c); return [...m.values()] }
+  const cur = uniq(db.prepare('SELECT * FROM components WHERE version_id = ?').all(v.id))
+  const prev = uniq(db.prepare('SELECT * FROM components WHERE version_id = ?').all(base.id))
+  const prevExact = new Set(prev.map(exact)), curExact = new Set(cur.map(exact))
 
   const pick = c => ({ name: c.name, version: c.version, kind: c.kind, supplier: c.supplier, purl: c.purl })
-  const added = [], changed = []
   let unchanged = 0
-  for (const c of cur) {
-    const old = prevMap.get(key(c))
-    if (!old) { added.push(pick(c)) }
-    else if ((old.version || '') !== (c.version || '')) changed.push({ ...pick(c), from: old.version || '—', to: c.version || '—' })
-    else unchanged++
+  const curLeft = [], prevLeft = []
+  for (const c of cur) (prevExact.has(exact(c)) ? unchanged++ : curLeft.push(c))
+  for (const c of prev) if (!curExact.has(exact(c))) prevLeft.push(c)
+
+  const prevByBase = new Map()
+  for (const c of prevLeft) {
+    if (!prevByBase.has(baseKey(c))) prevByBase.set(baseKey(c), [])
+    prevByBase.get(baseKey(c)).push(c)
   }
-  const removed = prev.filter(c => !curKeys.has(key(c))).map(pick)
+  const added = [], changed = []
+  for (const c of curLeft) {
+    const alte = prevByBase.get(baseKey(c))
+    if (alte && alte.length) {
+      const old = alte.shift()
+      changed.push({ ...pick(c), from: old.version || '—', to: c.version || '—' })
+    } else added.push(pick(c))
+  }
+  const removed = [...prevByBase.values()].flat().map(pick)
   res.json({ base: { id: base.id, version: base.version }, added, removed, changed, unchanged })
 })
 
 const PORT = 5178
-app.listen(PORT, () => console.log('SBOM-Tool-API auf http://localhost:' + PORT + ' · DB: server/sbom.db'))
+app.listen(PORT, '127.0.0.1', () => console.log('SBOM-Tool-API auf http://localhost:' + PORT + ' · DB: server/sbom.db'))

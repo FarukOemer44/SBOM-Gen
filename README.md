@@ -218,7 +218,8 @@ products (id, name, hersteller)
 audit_log (ts, action, detail)   ← every mutation
 ```
 
-SQLite via `better-sqlite3`, file `server/sbom.db`, created on first start and gitignored.
+SQLite via `better-sqlite3`, file `server/sbom.db` — ships with the repository (D-022) so the
+demo opens with data; only the WAL side files are gitignored. Delete the file for a clean start.
 
 ### `components` — the inventory is a superset of the SBOM
 
@@ -351,8 +352,8 @@ The drawer follows the order the work actually happens in:
    remediation target is recorded rather than retyped.
 3. **Actively exploited** — a separate boolean with a mandatory evidence field. **Never derived
    from the CVSS score**: the legal definition requires reliable evidence of real-world
-   exploitation, which a severity number is not. Setting it surfaces the reporting deadlines as a
-   hint; the reporting chain itself belongs to a different module.
+   exploitation, which a severity number is not. The module records the flag and its evidence,
+   nothing more — deadlines live in the reporting module (D-036).
 4. **Upstream report** — who the vulnerability in a third-party component was reported to, when,
    and whether fix code was shared.
 5. **Advisory draft** — available once a finding is `fixed`; downloads a Markdown skeleton
@@ -435,7 +436,7 @@ Every non-obvious rule in the code traces to a provision of Regulation (EU) 2024
 - **Generating SBOMs.** The customer's build does that (Syft, Trivy, cdxgen, a build plugin).
   This tool consumes them.
 - **The Article 14 reporting chain** with its calculated deadlines — a separate module. Marking a
-  finding as actively exploited shows the deadlines as a hint and nothing more.
+  finding as actively exploited records the flag and its evidence; no deadline appears here (D-036).
 - **Publishing advisories and shipping updates.** The tool produces a draft and keeps the record;
   acting is the manufacturer's job.
 - **Supplier master data.** Components link to supplier management, they do not replace it.

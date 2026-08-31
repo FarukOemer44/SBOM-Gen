@@ -41,9 +41,9 @@ body, input, textarea, select, button { font-family: 'DM Sans', sans-serif; font
 .searchbox input { border: none; outline: none; width: 100%; font-size: 14px; }
 .hb { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #E3E8EF; background: #fff; cursor: pointer; font-size: 14px; font-weight: 500; color: #14142B; }
 .hb:hover { background: rgba(18,152,255,0.08); }
-.ab { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 8px; background: linear-gradient(90deg, #087ef5, #11d3ef); color: #fff; cursor: pointer; border: none; font-size: 14px; font-weight: 500; }
-.ab:hover { filter: brightness(0.95); }
-.ab:disabled { opacity: .45; cursor: default; filter: none; }
+.ab { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 8px; background: #1298ff; color: #fff; cursor: pointer; border: none; font-size: 14px; font-weight: 500; } /* D-035: einfarbig statt Verlauf */
+.ab:hover { background: #0d84e3; }
+.ab:disabled { opacity: .45; cursor: default; }
 .hb.sm, .ab.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 input.field, textarea.field, select.field { border: 1px solid #E3E8ED; border-radius: 10px; padding: 9px 12px; background: #fff; outline: none; width: 100%; }
 input.field:focus, textarea.field:focus, select.field:focus { border-color: #1298ff; box-shadow: 0 0 0 3px #a6d5fa; }
@@ -127,8 +127,8 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
   font-size: 13.5px; color: #1F2937; cursor: pointer; white-space: nowrap; }
 .popitem:hover { background: #F2F7FD; }
 .popitem.active { color: #1298ff; font-weight: 600; background: rgba(18,152,255,0.07); }
-.popdel { display: inline-flex; padding: 3px; border-radius: 6px; color: #C2CCD8; }
-.popdel:hover { background: #FDECEC; color: #DC2626; }
+.popdel { display: inline-flex; padding: 3px; border-radius: 6px; color: #DC2626; }
+.popdel:hover { background: #FDECEC; }
 
 /* Filter-Chips: leere Filter sind sichtbar, aber nicht klickbar */
 .sevchip.off { opacity: .4; cursor: default; }
@@ -147,3 +147,10 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 .deparrow { color: #C2CCD8; font-size: 12px; }
 .depnode.root { background: #EDF2FA; color: #0B1928; font-weight: 600; }
 .hb.sm.empfohlen { border-color: #27AE60; color: #27AE60; }
+.hb.active { border-color: #1298ff; color: #1298ff; background: rgba(18,152,255,0.06); }
+
+/* Fragezeichen-Kreis: Erklaerung beim Darueberfahren (D-037) */
+.helpdot { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
+  border-radius: 50%; background: #F1F2F4; color: #69778E; font-size: 10px; font-weight: 700;
+  cursor: help; margin-left: 5px; vertical-align: middle; flex: 0 0 auto; }
+.helpdot:hover { background: rgba(18,152,255,0.09); color: #1298ff; }

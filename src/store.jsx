@@ -91,7 +91,7 @@ function DbError({ onRetry }) {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontFamily: 'DM Sans, sans-serif' }}>
       <div style={{ fontSize: 16, fontWeight: 600, color: '#0B1928' }}>{t('Datenbank nicht erreichbar')}</div>
-      <div style={{ fontSize: 13, color: '#69778E' }}>{t('API-Server starten:')} <code>npm run server</code> (Port 5178)</div>
+      <div style={{ fontSize: 13, color: '#69778E' }}>{t('API-Server starten:')} <b>npm run server</b> (Port 5178)</div>
       <button className="ab" onClick={onRetry}>{t('Erneut verbinden')}</button>
     </div>
   )

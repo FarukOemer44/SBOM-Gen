@@ -1,5 +1,5 @@
 import React from 'react'
-import { useT } from './i18n.jsx'
+import { useT, getLang } from './i18n.jsx'
 
 export const Pill = ({ kind = 'neutral', children, title }) => <span className={'pill ' + kind} title={title}>{children}</span>
 
@@ -47,17 +47,35 @@ export function SearchBox({ value, onChange }) {
   )
 }
 
+// Datum folgt der gewaehlten Sprache: TT.MM.JJJJ deutsch, DD/MM/YYYY englisch.
 export const fmtDT = (iso) => {
   if (!iso) return '—'
   const d = new Date(iso)
   if (isNaN(d)) return iso
   const p = n => String(n).padStart(2, '0')
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
+  const tag = getLang() === 'en'
+    ? `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`
+    : `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`
+  return `${tag} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 export const fmtD = (iso) => {
   if (!iso) return '—'
   const d = new Date(iso)
   if (isNaN(d)) return iso
   const p = n => String(n).padStart(2, '0')
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`
+  return getLang() === 'en'
+    ? `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`
+    : `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`
 }
+// Monatswerte (YYYY-MM) nie roh anzeigen: MM/JJJJ.
+export const fmtM = (ym) => {
+  if (!ym) return '—'
+  const m = String(ym).match(/^(\d{4})-(\d{2})$/)
+  return m ? `${m[2]}/${m[1]}` : ym
+}
+// purl lesbar machen: %40types → @types, %C3%BC → ü.
+export const pshow = (s) => { try { return decodeURIComponent(String(s)) } catch { return s } }
+// Kleiner Fragezeichen-Kreis: Erklaerung in Alltagssprache beim Darueberfahren (D-037).
+export const HelpDot = ({ text }) => (
+  <span className="helpdot" title={text}>?</span>
+)

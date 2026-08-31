@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { useT, useI18n } from '../i18n.jsx'
-import { TitleBar, SearchBox, Pill, Toggle, Drawer, Modal, CloseX, fmtDT, fmtD } from '../ui.jsx'
+import { TitleBar, SearchBox, Pill, Toggle, Drawer, Modal, CloseX, HelpDot, fmtDT, fmtD, fmtM, pshow } from '../ui.jsx'
 
 // Komponententypen (Dokument Abschnitt 1.6): Hardware steht im Inventar, nicht in der SBOM.
 const KINDS = [
@@ -29,15 +29,15 @@ const VEX_STATI = [
 const DECISIONS = [
   ['', '— offen —'],
   ['fix_now', 'Sofort beheben'],
-  ['mitigate', 'Mitigieren'],
+  ['mitigate', 'Risiko mindern'],
   ['accept', 'Risiko akzeptieren (befristet)'],
   ['defer', 'Zurückstellen'],
 ]
 
 // Eingangskanäle (ENISA 4.13: Intake-Kanäle festhalten; D-020: Mail-Eingang beim Kunden)
 const INTAKE = [
-  ['osv_scan', 'OSV-Abgleich'],
-  ['cvd_mail', 'Meldung per Mail (CVD-Kontaktadresse)'],
+  ['osv_scan', 'Automatischer Abgleich'],
+  ['cvd_mail', 'Meldung per Mail an die Sicherheitsadresse'],
   ['advisory', 'Lieferanten-Advisory'],
   ['test', 'Eigene Tests'],
   ['csirt', 'Hinweis von außen'],
@@ -136,9 +136,9 @@ function useAutoSave(url, initial, call) {
   const [saved, setSaved] = useState(false)
   const timer = useRef(null)
   const flash = () => { setSaved(true); setTimeout(() => setSaved(false), 1400) }
-  const set = (k, v, { debounce = false } = {}) => {
+  const apply = (patch, { debounce = false } = {}) => {
     setF(prev => {
-      const next = { ...prev, [k]: v }
+      const next = { ...prev, ...patch }
       clearTimeout(timer.current)
       const send = () => call('PATCH', url, next).then(flash).catch(() => {})
       if (debounce) timer.current = setTimeout(send, 700)
@@ -146,8 +146,9 @@ function useAutoSave(url, initial, call) {
       return next
     })
   }
+  const set = (k, v, o) => apply({ [k]: v }, o)
   React.useEffect(() => () => clearTimeout(timer.current), [])
-  return [f, set, saved]
+  return [f, set, saved, apply]
 }
 
 function SavedHint({ on }) {
@@ -163,7 +164,7 @@ function SevPill({ f }) {
       : f.severity === 'MITTEL' ? ['Mittel', 'amber']
         : f.severity === 'NIEDRIG' ? ['Niedrig', 'green']
           : ['Unbewertet', 'neutral']
-  return <Pill kind={kind}>{t(label)}{f.severity !== '—' ? sc : ''}</Pill>
+  return <Pill kind={kind} title={f.score != null ? t('CVSS — Schweregrad von 0 bis 10, aus der Meldungsquelle') : undefined}>{t(label)}{f.severity !== '—' ? sc : ''}</Pill>
 }
 function VexPill({ v }) {
   const t = useT()
@@ -196,9 +197,9 @@ function NewProductModal({ onClose }) {
       <div style={{ display: 'flex', alignItems: 'center' }}><span className="dtitle" style={{ flex: 1 }}>{t('Neues Produkt')}</span><CloseX onClick={onClose} /></div>
       <div className="dsub">{t('Die Zusammensetzung wird je Version geführt.')}</div>
       <div className="fieldlab">{t('Produktname')}</div>
-      <input className="field" value={name} onChange={e => setName(e.target.value)} placeholder="z. B. SmartPanel 3000" autoFocus />
+      <input className="field" value={name} onChange={e => setName(e.target.value)} placeholder={t('z. B. SmartPanel 3000')} autoFocus />
       <div className="fieldlab">{t('Hersteller')}</div>
-      <input className="field" value={hersteller} onChange={e => setHersteller(e.target.value)} placeholder="z. B. Muster GmbH" />
+      <input className="field" value={hersteller} onChange={e => setHersteller(e.target.value)} placeholder={t('z. B. Muster GmbH')} />
       <div className="fieldlab">{t('Erste Version')}</div>
       <input className="field" value={version} onChange={e => setVersion(e.target.value)} />
 
@@ -254,9 +255,9 @@ function NewVersionModal({ onClose }) {
       <div className="dsub">{t('Jede Version führt Komponenten, SBOMs und Funde getrennt.')}</div>
 
       <div className="fieldlab">{t('Versionsbezeichnung')}</div>
-      <input className="field" value={ver} onChange={e => setVer(e.target.value)} placeholder="z. B. 1.1.0" autoFocus />
+      <input className="field" value={ver} onChange={e => setVer(e.target.value)} placeholder={t('z. B. 1.1.0')} autoFocus />
 
-      <div className="fieldlab">{t('Hat sich die Softwarezusammensetzung geändert?')}</div>
+      <div className="fieldlab">{t('Hat sich die Software geändert?')}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {[
           ['unchanged', t('Nein — SBOM unverändert'), t('Komponenten und der SBOM-Stand aus') + ' ' + (version?.version || '') + ' ' + t('werden übernommen.')],
@@ -290,7 +291,8 @@ function NewVersionModal({ onClose }) {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
         <button className="hb" onClick={onClose}>{t('Abbrechen')}</button>
-        <button className="ab" disabled={!ready || busy} onClick={save}>
+        <button className="ab" disabled={!ready || busy} onClick={save}
+          title={!ready && mode === 'new_sbom' && !file ? t('Erst möglich, wenn eine Datei gewählt ist') : undefined}>
           {busy ? t('Bitte warten …') : t('Anlegen')}
         </button>
       </div>
@@ -299,12 +301,13 @@ function NewVersionModal({ onClose }) {
 }
 
 // ---------- Komponenten-Drawer (anlegen/bearbeiten) ----------
-function ComponentDrawer({ comp, onClose }) {
+function ComponentDrawer({ comp, onClose, onOpenFinding }) {
   const t = useT()
-  const { call, sel, product } = useStore()
+  const { call, sel, product, data } = useStore()
   const blank = {
-    kind: 'software_oss', name: '', version: '', supplier: '', purl: '', cpe: '', license: '',
+    kind: 'hardware', name: '', version: '', supplier: '', purl: '', cpe: '', license: '',
     is_core_function: 0, dd_status: 'offen', dd_note: '',
+    artifact: '', supplier_address: '', acquired_at: '', supplier_support_until: '',
   }
   // Bestehende Komponente speichert automatisch; eine neue braucht den Anlegen-Schritt.
   const [auto, setAuto, saved] = useAutoSave(comp ? '/api/components/' + comp.id : '', comp ? { ...comp } : blank, call)
@@ -320,8 +323,9 @@ function ComponentDrawer({ comp, onClose }) {
   return (
     <Drawer onClose={onClose}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span className="dtitle" style={{ flex: 1 }}>{comp ? f.name || 'Komponente' : 'Komponente hinzufügen'}</span>
+        <span className="dtitle" style={{ flex: 1 }}>{comp ? f.name || t('Komponente') : t('Komponente hinzufügen')}</span>
         {comp?.source === 'sbom_import' && <Pill kind="blue">{t('aus SBOM-Import')}</Pill>}
+        {comp && <SavedHint on={saved} />}
         <CloseX onClick={onClose} />
       </div>
       <div className="dsub">{t('Hardware und Software stehen im Inventar; in die SBOM gehört nur Software.')}</div>
@@ -337,78 +341,92 @@ function ComponentDrawer({ comp, onClose }) {
         <div style={{ flex: 2 }}><div className="fieldlab">{t('Name')}</div><input className="field" value={f.name} onChange={e => set('name', e.target.value, { debounce: true })} /></div>
         <div style={{ flex: 1 }}><div className="fieldlab">{t('Version')}</div><input className="field" value={f.version} onChange={e => set('version', e.target.value, { debounce: true })} /></div>
       </div>
-      <div className="fieldlab">{t('Lieferant')} <span className="fund">{isOwn ? t('— entfällt bei Eigenentwicklung') : t('(Verknüpfung ins Lieferantenmanagement)')}</span></div>
+      <div className="fieldlab">{t('Lieferant')} {isOwn && <span className="fund">{t('— entfällt bei Eigenentwicklung')}</span>}</div>
       <input className="field" value={f.supplier} onChange={e => set('supplier', e.target.value, { debounce: true })} disabled={isOwn} />
       {!isHw && <>
-        <div className="fieldlab">purl <span className="fund">{t('(Package URL — Schlüssel für den OSV-Abgleich)')}</span></div>
+        <div className="fieldlab">{t('Paket-Kennung (purl)')}<HelpDot text={t('Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.')} /></div>
         <input className="field" value={f.purl} onChange={e => set('purl', e.target.value, { debounce: true })} placeholder="pkg:npm/lodash@4.17.21" />
       </>}
-      <div className="fieldlab">cpe <span className="fund">{t('(für Hardware/Firmware — NVD-Identifikation, optional)')}</span></div>
+      <div className="fieldlab">{t('Hardware-Kennung (cpe)')}<HelpDot text={t('Kennung für Hardware und Firmware aus dem staatlichen Schwachstellenkatalog (NVD). Freiwillig.')} /></div>
       <input className="field" value={f.cpe} onChange={e => set('cpe', e.target.value, { debounce: true })} placeholder="cpe:2.3:h:…" />
-      <div className="fieldlab">{t('Artefakt')} <span className="fund">{t('(bei SBOM-Import automatisch, sonst frei)')}</span></div>
+      <div className="fieldlab">{t('Artefakt')} <span className="fund">{t('— beim Import gesetzt, sonst selbst eintragen')}</span></div>
       <input className="field" value={f.artifact || ''} onChange={e => set('artifact', e.target.value, { debounce: true })}
         placeholder={f.kind === 'hardware' ? t('z. B. Gerät, Baugruppe') : t('z. B. Backend, Firmware')} />
 
-      <div className="fieldlab">{t('Lizenz')} <span className="fund">{t('(nur mitgespeichert — keine Lizenzanalyse, D-006)')}</span></div>
+      <div className="fieldlab">{t('Lizenz')} <span className="fund">{t('— wird nur festgehalten, nicht bewertet')}</span></div>
       <input className="field" value={f.license} onChange={e => set('license', e.target.value, { debounce: true })} />
 
       {!isOwn && f.kind !== 'software_oss' && <>
-        <div className="fieldlab">{t('Anschrift des Lieferanten')} <span className="fund">{t('(auf Anfrage der Marktüberwachung, 10 Jahre)')}</span></div>
+        <div className="fieldlab">{t('Anschrift des Lieferanten')} <span className="fund">{t('— 10 Jahre aufbewahren, für Behördenanfragen')}</span></div>
         <textarea className="field" rows={2} value={f.supplier_address || ''}
           onChange={e => set('supplier_address', e.target.value, { debounce: true })}
           placeholder={t('Straße, PLZ Ort, Land')} />
 
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div className="fieldlab">{t('Bezogen am')}</div>
-            <input type="date" className="field" value={f.acquired_at || ''}
-              onChange={e => set('acquired_at', e.target.value)} />
-            {aufbewahrenBis(f.acquired_at) && (
-              <div className="muted" style={{ marginTop: 6 }}>
-                {t('Angaben vorzuhalten bis')} <b>{fmtD(aufbewahrenBis(f.acquired_at).toISOString())}</b>
-              </div>
-            )}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className="fieldlab">{t('Unterstützt bis')}</div>
-            <input type="month" className="field" value={f.supplier_support_until || ''}
-              onChange={e => set('supplier_support_until', e.target.value)} />
-            {monatVor(f.supplier_support_until, product?.support_until) && (
-              <div style={{ marginTop: 6 }}>
-                <Pill kind="red">{t('endet vor dem Produkt')}</Pill>
-              </div>
-            )}
-          </div>
-        </div>
-        {monatVor(f.supplier_support_until, product?.support_until) && !!f.is_core_function && (
-          <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
-            {t('Kernkomponente: Die Unterstützung endet vor der des Produkts')} ({product.support_until}).
-            {' '}{t('Das ist bei der Festlegung des Unterstützungszeitraums zu berücksichtigen.')}
+        <div className="fieldlab">{t('Bezogen am')}</div>
+        <input type="date" className="field" style={{ maxWidth: 220 }} value={f.acquired_at || ''}
+          onChange={e => set('acquired_at', e.target.value)} />
+        {aufbewahrenBis(f.acquired_at) && (
+          <div className="muted" style={{ marginTop: 6 }}>
+            {t('Aufbewahren bis')} <b>{fmtD(aufbewahrenBis(f.acquired_at).toISOString())}</b>
           </div>
         )}
       </>}
 
-      <div className="fieldlab">{t('Kernfunktion des Produkts?')}</div>
+      <div className="fieldlab">{t('Kernfunktion des Produkts?')}<HelpDot text={t('Ohne diese Komponente tut das Produkt nicht mehr, wofür es gebaut ist. Dann zählt der Unterstützungszeitraum des Lieferanten für euren mit.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle on={!!f.is_core_function} onChange={v => set('is_core_function', v ? 1 : 0)} />
-        <span className="muted">{f.is_core_function ? 'Ja — Unterstützungszeitraum des Lieferanten berücksichtigen' : 'Nein'}</span>
+        <span className="muted">{f.is_core_function ? t('Ja — Unterstützungszeitraum des Lieferanten zählt mit') : t('Nein')}</span>
       </div>
 
+      {/* Art. 13 Abs. 8 i. V. m. Abs. 5: auch eine quelloffene Kernkomponente
+          braucht ein erfassbares Unterstützungsende. */}
+      {!isOwn && (f.kind !== 'software_oss' || !!f.is_core_function) && <>
+        <div className="fieldlab">{t('Lieferant unterstützt bis')}</div>
+        <input type="month" className="field" style={{ maxWidth: 220 }} value={f.supplier_support_until || ''}
+          onChange={e => set('supplier_support_until', e.target.value)} />
+        {monatVor(f.supplier_support_until, product?.support_until) && (
+          <div style={{ marginTop: 6 }}>
+            <Pill kind="red">{t('endet vor dem Produkt')}</Pill>
+          </div>
+        )}
+        {monatVor(f.supplier_support_until, product?.support_until) && !!f.is_core_function && (
+          <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
+            {t('Kernkomponente: Der Lieferant hört vor eurem Produkt auf')} ({fmtM(f.supplier_support_until)} {t('gegen')} {fmtM(product.support_until)}).
+            {' '}{t('Kürzt euren Unterstützungszeitraum oder plant einen Ersatz.')}
+          </div>
+        )}
+      </>}
+
       {!isOwn && <>
-        <div className="fieldlab">{t('Sorgfaltsnachweis')}</div>
+        <div className="fieldlab">{t('Lieferant geprüft?')}<HelpDot text={t('Was habt ihr geprüft, bevor ihr die Komponente eingebaut habt? Pflicht für alles, was ihr selbst ausgewählt habt.')} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <Toggle on={f.dd_status === 'geprueft'} onChange={v => set('dd_status', v ? 'geprueft' : 'offen')} />
           {f.dd_status === 'geprueft' ? <Pill kind="green">{t('Geprüft')}</Pill> : <Pill kind="amber">{t('Offen')}</Pill>}
         </div>
         <textarea className="field" rows={3} value={f.dd_note} onChange={e => set('dd_note', e.target.value, { debounce: true })}
-          placeholder={t('z. B. Lieferanten-Baseline 2026 (Security-Kontakt, Patch-Zusagen) im Lieferantenmanagement abgelegt')} />
+          placeholder={t('z. B. Sicherheitskontakt und Update-Zusagen des Lieferanten liegen vor')} />
+      </>}
+
+      {comp && !isHw && <DependencyPath componentId={comp.id} componentName={f.name} ziel={null} />}
+
+      {comp && (data?.findings || []).some(x => x.component_id === comp.id) && <>
+        <div className="fieldlab">{t('Funde an dieser Komponente')}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(data?.findings || []).filter(x => x.component_id === comp.id).map(x => (
+            <div key={x.id} className="popitem" style={{ border: '1px solid #E3E8ED', borderRadius: 8 }}
+              onClick={() => onOpenFinding && onOpenFinding(x)}>
+              <SevPill f={x} />
+              <span className="link">{(x.aliases || '').split(', ').find(a => a.startsWith('CVE-')) || x.vuln_id}</span>
+              <span className="muted" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.summary}</span>
+            </div>
+          ))}
+        </div>
       </>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
         {comp && <button className="hb" style={{ color: '#DC2626' }} onClick={del}>{t('Löschen')}</button>}
         <span style={{ flex: 1 }} />
-        {comp ? <SavedHint on={saved} />
-              : <button className="ab" disabled={!draft.name.trim()} onClick={create}>{t('Anlegen')}</button>}
+        {!comp && <button className="ab" disabled={!draft.name.trim()} onClick={create}>{t('Anlegen')}</button>}
       </div>
     </Drawer>
   )
@@ -419,13 +437,13 @@ function FindingDrawer({ finding, onClose }) {
   const { t, lang } = useI18n()
   const T = (de, en) => (lang === 'en' ? en : de)
   const { call, product, version } = useStore()
-  const [f, set, saved] = useAutoSave('/api/findings/' + finding.id, { ...finding }, call)
+  const [f, set, saved, apply] = useAutoSave('/api/findings/' + finding.id, { ...finding }, call)
   const advisory = () => {
     // Advisory-Entwurf (Anhang I Teil II Nr. 4) — Entwurf herunterladen; veröffentlichen muss der Hersteller.
     const md = [
       T('# Sicherheitshinweis (ENTWURF) — ', '# Security advisory (DRAFT) — ') + product.name + ' ' + version.version,
       '',
-      T('> Entwurf nach Anhang I Teil II Nr. 4 CRA — Veröffentlichung erst nach Bereitstellung der Sicherheitsaktualisierung.',
+      T('> Entwurf nach Anhang I Teil II Nr. 4 CRA — erst veröffentlichen, wenn das Update verfügbar ist.',
         '> Draft under Annex I Part II No. 4 CRA — publish only once the security update is available.'),
       '',
       T('## Betroffenes Produkt', '## Affected product'),
@@ -435,13 +453,13 @@ function FindingDrawer({ finding, onClose }) {
       '',
       T('## Schwachstelle', '## Vulnerability'),
       T('- Kennung: ', '- Identifier: ') + f.vuln_id + (f.aliases ? ' (' + f.aliases + ')' : ''),
-      T('- Schwere: ', '- Severity: ') + f.severity + (f.score != null ? ' (CVSS ' + Number(f.score).toFixed(1) + ')' : ''),
-      T('- Beschreibung: ', '- Description: ') + (f.summary || '—'),
+      T('- Schwere: ', '- Severity: ') + t((SEVS.find(x => x[0] === f.severity) || [, '—'])[1]) + (f.score != null ? ' (CVSS ' + Number(f.score).toFixed(1) + ')' : ''),
+      T('- Beschreibung: ', '- Description: ') + (f.summary && !f.summary.startsWith('osv.dev/') ? f.summary : T('Keine Beschreibung vorhanden — siehe Quellen.', 'No description available — see sources.')),
       '',
-      T('## Auswirkungen und Abhilfe', '## Impact and remedy'),
-      T('- Status: behoben (VEX: fixed)', '- Status: fixed (VEX: fixed)'),
-      T('- Abhilfe: ', '- Remedy: ') + (f.fix_version ? f.component_name + ' ' + f.fix_version
-          : f.fixed_versions ? T('Version ', 'version ') + f.fixed_versions
+      T('## Auswirkungen und Behebung', '## Impact and remediation'),
+      T('- Status: behoben', '- Status: fixed'),
+      T('- Behebung: ', '- Remediation: ') + (f.fix_version ? f.component_name + ' ' + f.fix_version
+          : f.fixed_versions ? T('Version ', 'Version ') + f.fixed_versions
             : T('[Sicherheitsaktualisierung eintragen]', '[enter the security update]')),
       T('- Maßnahmen für Nutzer: [eindeutige, verständliche Anleitung ergänzen]',
         '- Action for users: [add clear, understandable instructions]'),
@@ -449,7 +467,7 @@ function FindingDrawer({ finding, onClose }) {
       ...(f.refs_json ? ['', T('## Quellen', '## Sources'), ...(() => { try { return JSON.parse(f.refs_json).map(r => '- ' + r.label + ': ' + r.url) } catch { return [] } })()] : []),
       '',
       T('_Entwurf erzeugt am ', '_Draft generated on ') + new Date().toLocaleDateString(lang === 'en' ? 'en-GB' : 'de-DE')
-        + T('. Vor Veröffentlichung fachlich prüfen und vervollständigen._', '. Review and complete before publishing._'),
+        + T('. Vor dem Veröffentlichen prüfen und ergänzen._', '. Review and complete before publishing._'),
     ].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
@@ -462,16 +480,17 @@ function FindingDrawer({ finding, onClose }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span className="dtitle" style={{ flex: 1 }}>{f.vuln_id} — {f.component_name || '—'}</span>
         {!!f.actively_exploited && <Pill kind="red" >{t('Aktiv ausgenutzt')}</Pill>}
+        <SavedHint on={saved} />
         <CloseX onClick={onClose} />
       </div>
       <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <SevPill f={f} />
         {f.aliases && f.aliases.split(', ').filter(a => a.startsWith('CVE-')).map(a => <Pill key={a} kind="blue">{a}</Pill>)}
-        {f.cwe_ids && f.cwe_ids.split(', ').slice(0, 4).map(c => <Pill key={c} kind="neutral" title={t('Schwachstellenklasse')}>{c}</Pill>)}
+        {f.cwe_ids && f.cwe_ids.split(', ').slice(0, 4).map(c => <Pill key={c} kind="neutral" title={t('Art der Schwachstelle (CWE-Katalog)')}>{c}</Pill>)}
       </div>
-      <div className="dsub">{f.component_purl ? f.component_purl + ' · ' : ''}{f.summary}</div>
+      <div className="dsub">{f.component_purl ? pshow(f.component_purl) + ' · ' : ''}{f.summary}</div>
       <div className="dsub">
-        {t('Eingang:')} {t(intakeLabel(f.intake_channel))}
+        {t('Gemeldet über:')} {t(intakeLabel(f.intake_channel))}
         {f.published ? ' · ' + t('Advisory veröffentlicht:') + ' ' + fmtD(f.published) : ''}
       </div>
 
@@ -484,24 +503,23 @@ function FindingDrawer({ finding, onClose }) {
             && <> · {t('behoben ab')} <b style={{ color: '#27AE60' }}>{f.component_name} {empfohleneFixVersion(f.component_version, f.fixed_versions.split(', '))}</b></>}
         </div>
       )}
-      {f.fixed_versions
-        ? (f.fixed_versions.startsWith('kein Fix')
-            ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Pill kind="red">{t('Keine feste Version')}</Pill>
-                <span className="muted">{f.fixed_versions}</span></div>
-            : <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span className="muted">{t('Behoben in:')}</span>
-                {f.fixed_versions.split(', ').map(v => (
-                  <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')
-                    + (v === empfohleneFixVersion(f.component_version, f.fixed_versions.split(', ')) ? ' empfohlen' : '')}
-                    style={f.fix_version === v ? { borderColor: '#1298ff', color: '#1298ff' } : {}}
-                    title={t('Als Zielversion uebernehmen und Entscheidung auf Sofort beheben setzen')}
-                    onClick={() => setF(x => ({ ...x, fix_version: v, decision: x.decision || 'fix_now' }))}>
-                    {f.component_name} {v}
-                  </button>
-                ))}
-                {f.fix_version && <Pill kind="green">Zielversion: {f.fix_version}</Pill>}
-              </div>)
-        : <span className="muted">{t('Keine Versionsangabe im Advisory.')}</span>}
+      {f.fix_status === 'none'
+        ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Pill kind="red">{t('Keine Behebung verfügbar')}</Pill>
+            {f.last_affected && <span className="muted">{t('betroffen bis')} {f.last_affected}</span>}</div>
+        : f.fixed_versions
+          ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="muted">{t('Behoben in:')}</span>
+              {f.fixed_versions.split(', ').map(v => (
+                <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')
+                  + (v === empfohleneFixVersion(f.component_version, f.fixed_versions.split(', ')) ? ' empfohlen' : '')}
+                  title={t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
+                  onClick={() => apply({ fix_version: v, decision: f.decision || 'fix_now' })}>
+                  {f.component_name} {v}
+                </button>
+              ))}
+              {f.fix_version && <Pill kind="blue">{t('Zielversion:')} {f.fix_version}</Pill>}
+            </div>
+          : <span className="muted">{t('Keine Versionsangabe im Advisory.')}</span>}
 
       <DependencyPath componentId={f.component_id} componentName={f.component_name}
         ziel={empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', '))} />
@@ -525,7 +543,7 @@ function FindingDrawer({ finding, onClose }) {
         )
       })()}
 
-      <div className="fieldlab">{t('Betroffenheit (VEX-Status)')}</div>
+      <div className="fieldlab">{t('Betroffenheit')}<HelpDot text={t('Ist euer Produkt durch diese Schwachstelle wirklich angreifbar? Nicht jede Schwachstelle in einer Komponente trifft euch.')} /></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {VEX_STATI.map(([v, label]) => (
           <span key={v} className={'tabpill' + (f.vex_status === v ? ' active' : '')} onClick={() => set('vex_status', v)}>{t(label)}</span>
@@ -533,7 +551,7 @@ function FindingDrawer({ finding, onClose }) {
       </div>
       <div className="fieldlab">{t('Begründung')}</div>
       <textarea className="field" rows={2} value={f.vex_justification}
-        placeholder={f.vex_status === 'not_affected' ? 'z. B. die verwundbare Funktion wird nicht aufgerufen (code_not_reachable)' : 'Einschätzung, Analyse-Stand'}
+        placeholder={f.vex_status === 'not_affected' ? t('z. B. die verwundbare Funktion wird bei uns nie aufgerufen') : t('Einschätzung, Analyse-Stand')}
         onChange={e => set('vex_justification', e.target.value, { debounce: true })} />
 
       <div className="fieldlab">{t('Entscheidung')}</div>
@@ -542,12 +560,12 @@ function FindingDrawer({ finding, onClose }) {
           {DECISIONS.map(([v, label]) => <option key={v} value={v}>{t(label)}</option>)}
         </select>
         {f.decision === 'accept' && (
-          <input type="date" className="field" style={{ flex: 1 }} value={f.accept_until} onChange={e => set('accept_until', e.target.value)} title={t('Befristung (Pflicht bei accept)')} />
+          <input type="date" className="field" style={{ flex: 1 }} value={f.accept_until} onChange={e => set('accept_until', e.target.value)} title={t('Bis wann gilt das?')} />
         )}
       </div>
       {(f.decision === 'accept' || f.decision === 'defer') && (
         <textarea className="field" rows={2} style={{ marginTop: 8 }} value={f.decision_rationale}
-          placeholder={t('Begründung (Pflicht bei accept/defer)')} onChange={e => set('decision_rationale', e.target.value, { debounce: true })} />
+          placeholder={t('Warum diese Entscheidung?')} onChange={e => set('decision_rationale', e.target.value, { debounce: true })} />
       )}
 
       <div style={{ display: 'flex', gap: 12 }}>
@@ -557,12 +575,16 @@ function FindingDrawer({ finding, onClose }) {
             placeholder={product?.owner || t('Name')} />
         </div>
         <div style={{ flex: 1 }}>
-          <div className="fieldlab">{t('Kenntnis am')}</div>
+          <div className="fieldlab">{t('Bekannt seit')}</div>
           <input type="datetime-local" className="field" value={toLocal(f.became_known_at)} onChange={e => set('became_known_at', fromLocal(e.target.value))} />
         </div>
       </div>
 
-      <div className="fieldlab">{t('Aktiv ausgenutzt?')}</div>
+      <div className="fieldlab">{t('Behebung verfügbar seit')} <span className="fund">{t('(sobald Update oder Abhilfe bereitsteht)')}</span></div>
+      <input type="date" className="field" style={{ maxWidth: 220 }} value={f.mitigation_available_at || ''}
+        onChange={e => set('mitigation_available_at', e.target.value)} />
+
+      <div className="fieldlab">{t('Aktiv ausgenutzt?')}<HelpDot text={t('Es gibt belastbare Hinweise, dass die Schwachstelle tatsächlich angegriffen wird. Nie aus dem CVSS-Wert ableiten.')} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle on={!!f.actively_exploited} onChange={v => set('actively_exploited', v ? 1 : 0)} />
         <span className="muted">{f.actively_exploited ? t('Ja — verlässliche Nachweise erforderlich') : t('Nein / keine Nachweise')}</span>
@@ -572,9 +594,9 @@ function FindingDrawer({ finding, onClose }) {
           placeholder={t('Nachweis: worauf stützt sich die Einstufung?')} onChange={e => set('exploit_evidence', e.target.value, { debounce: true })} />
       </>}
 
-      <div className="fieldlab">{t('Upstream-Meldung')}</div>
+      <div className="fieldlab">{t('Meldung an den Komponenten-Hersteller')}</div>
       <div style={{ display: 'flex', gap: 12 }}>
-        <input className="field" style={{ flex: 2 }} value={f.upstream_reported_to} placeholder={t('Gemeldet an (Hersteller/Wartende)')} onChange={e => set('upstream_reported_to', e.target.value, { debounce: true })} />
+        <input className="field" style={{ flex: 2 }} value={f.upstream_reported_to} placeholder={t('Gemeldet an — Projekt oder Lieferant')} onChange={e => set('upstream_reported_to', e.target.value, { debounce: true })} />
         <input type="date" className="field" style={{ flex: 1 }} value={f.upstream_reported_at} onChange={e => set('upstream_reported_at', e.target.value)} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
@@ -583,9 +605,8 @@ function FindingDrawer({ finding, onClose }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
-        {f.vex_status === 'fixed' && <button className="hb" onClick={advisory}>{t('Advisory-Entwurf ↓')}</button>}
+        {f.vex_status === 'fixed' && <button className="hb" onClick={advisory}>{t('Advisory-Entwurf')}</button>}
         <span style={{ flex: 1 }} />
-        <SavedHint on={saved} />
       </div>
     </Drawer>
   )
@@ -608,8 +629,8 @@ function SbomDrawer({ sbom, onClose }) {
 
       <div className="fieldlab">{t('Tiefe')}</div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <span className={'tabpill' + (sbom.depth === 'top_level' ? ' active' : '')} onClick={() => patch({ depth: 'top_level' })}>{t('Oberste Abhängigkeiten')}</span>
-        <span className={'tabpill' + (sbom.depth === 'full' ? ' active' : '')} onClick={() => patch({ depth: 'full' })}>{t('Vollständig aufgelöst')}</span>
+        <span className={'tabpill' + (sbom.depth === 'top_level' ? ' active' : '')} onClick={() => patch({ depth: 'top_level' })}>{t('Nur direkte Abhängigkeiten')}</span>
+        <span className={'tabpill' + (sbom.depth === 'full' ? ' active' : '')} onClick={() => patch({ depth: 'full' })}>{t('Alle Abhängigkeiten')}</span>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
@@ -620,7 +641,74 @@ function SbomDrawer({ sbom, onClose }) {
   )
 }
 
-// ---------- Manuelle Fund-Erfassung (D-020): Eingang kommt per Mail/Advisory, hier wird nur dokumentiert ----------
+// ---------- Manuelle Fund-Erfassung (D-020): Eingang kommt per Mail/Advisory, hier wird nur
+// dokumentiert. Kein Fristentext (D-036) — die Meldekette gehoert ins Modul Meldungen. ----------
+function NewFindingModal({ onClose }) {
+  const t = useT()
+  const { call, sel, data } = useStore()
+  const comps = data?.components || []
+  const [f, setFx] = useState({ vuln_id: '', component_id: '', intake_channel: 'cvd_mail',
+    severity: '—', summary: '', became_known_at: toLocal(new Date().toISOString()) })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const upd = (k, v) => setFx(x => ({ ...x, [k]: v }))
+  const save = async () => {
+    setBusy(true); setErr(null)
+    try {
+      await call('POST', '/api/versions/' + sel.vid + '/findings',
+        { ...f, component_id: f.component_id || null, became_known_at: fromLocal(f.became_known_at) })
+      onClose()
+    } catch (e) { setErr(String(e.message || e)) } finally { setBusy(false) }
+  }
+  return (
+    <Modal onClose={onClose} width={520}>
+      <div style={{ display: 'flex', alignItems: 'center' }}><span className="dtitle" style={{ flex: 1 }}>{t('Fund erfassen')}</span><CloseX onClick={onClose} /></div>
+      <div className="dsub">{t('Der Abgleich findet Software automatisch. Was per Mail, Lieferanten-Advisory oder aus eigenen Tests hereinkommt, erfasst du hier.')}</div>
+
+      <div className="fieldlab">{t('Kennung')}</div>
+      <input className="field" value={f.vuln_id} onChange={e => upd('vuln_id', e.target.value)}
+        placeholder={t('CVE-Nummer oder Advisory-Kennung')} autoFocus />
+
+      <div className="fieldlab">{t('Komponente')}</div>
+      <select className="field" value={f.component_id} onChange={e => upd('component_id', e.target.value)}>
+        <option value="">{t('— keine Zuordnung —')}</option>
+        {comps.map(c => <option key={c.id} value={c.id}>{c.name}{c.version ? ' ' + c.version : ''}</option>)}
+      </select>
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div className="fieldlab">{t('Gemeldet über:')}</div>
+          <select className="field" value={f.intake_channel} onChange={e => upd('intake_channel', e.target.value)}>
+            {INTAKE.filter(([v]) => v !== 'osv_scan').map(([v, label]) => <option key={v} value={v}>{t(label)}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div className="fieldlab">{t('Schwere')}</div>
+          <select className="field" value={f.severity} onChange={e => upd('severity', e.target.value)}>
+            {SEVS.map(([k, label]) => <option key={k} value={k}>{t(label)}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="fieldlab">{t('Bekannt seit')}</div>
+      <input type="datetime-local" className="field" value={f.became_known_at}
+        onChange={e => upd('became_known_at', e.target.value)} />
+
+      <div className="fieldlab">{t('Zusammenfassung')}</div>
+      <textarea className="field" rows={2} value={f.summary} onChange={e => upd('summary', e.target.value)}
+        placeholder={t('Was ist betroffen, was ist passiert?')} />
+
+      {err && <div style={{ marginTop: 12 }}><Pill kind="red">{t(err)}</Pill></div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+        <button className="hb" onClick={onClose}>{t('Abbrechen')}</button>
+        <button className="ab" disabled={!f.vuln_id.trim() || !f.became_known_at || busy} onClick={save}>
+          {busy ? t('Bitte warten …') : t('Anlegen')}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ---------- Änderungen zur Vorversion (D-019): automatisch berechnet, nichts wird gepflegt ----------
 function DiffTab({ versionLabel }) {
   const t = useT()
@@ -635,12 +723,11 @@ function DiffTab({ versionLabel }) {
       .catch(e => setErr(String(e.message || e)))
   }, [sel.vid])
 
-  if (err) return <div className="hintbox" style={{ margin: 16 }}>{err}</div>
+  if (err) return <div className="hintbox" style={{ margin: 16 }}>{t(err)}</div>
   if (!diff) return <div className="hintbox" style={{ margin: 16 }}>{t('Vergleich wird berechnet …')}</div>
   if (!diff.base) return (
     <div className="hintbox" style={{ margin: 16 }}>
-      <b style={{ color: '#0B1928' }}>{t('Erste Version')}</b> — es gibt keine Vorversion zum Vergleichen.
-      Sobald eine weitere Version existiert, erscheint hier automatisch der Unterschied der Komponenteninventare.
+      <b style={{ color: '#0B1928' }}>{t('Erste Version')}</b> — {t('es gibt keine Vorversion zum Vergleichen. Sobald du eine zweite Version anlegst, steht hier, was sich geändert hat.')}
     </div>
   )
   const kindLabel = k => kindMeta(k)[1]
@@ -657,7 +744,7 @@ function DiffTab({ versionLabel }) {
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0', flexWrap: 'wrap' }}>
         <Pill kind="blue">{t('Vergleich:')} {diff.base.version} → {versionLabel}</Pill>
-        <span className="muted">{diff.added.length} {t('neu ·')} {diff.removed.length} {t('entfernt ·')} {diff.changed.length} {t('Version geändert ·')} {diff.unchanged} {t('unverändert — automatisch aus den Inventaren berechnet')}</span>
+        <span className="muted">{diff.added.length} {t('neu ·')} {diff.removed.length} {t('entfernt ·')} {diff.changed.length} {t('Version geändert ·')} {diff.unchanged} {t('unverändert')}</span>
       </div>
       <div className="tblwrap sc">
         <table className="tbl">
@@ -667,7 +754,7 @@ function DiffTab({ versionLabel }) {
               render={(c, i) => (
                 <tr key={'a' + i}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl || '—'}</span></td>
+                    <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl ? pshow(c.purl) : '—'}</span></td>
                   <td>{t(kindLabel(c.kind))}</td>
                   <td><Pill kind="green">{c.version || '—'}</Pill></td>
                   <td>{c.supplier || '—'}</td>
@@ -677,7 +764,7 @@ function DiffTab({ versionLabel }) {
               render={(c, i) => (
                 <tr key={'c' + i}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl || '—'}</span></td>
+                    <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl ? pshow(c.purl) : '—'}</span></td>
                   <td>{t(kindLabel(c.kind))}</td>
                   <td><Pill kind="amber">{c.from} → {c.to}</Pill></td>
                   <td>{c.supplier || '—'}</td>
@@ -687,7 +774,7 @@ function DiffTab({ versionLabel }) {
               render={(c, i) => (
                 <tr key={'r' + i}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl || '—'}</span></td>
+                    <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl ? pshow(c.purl) : '—'}</span></td>
                   <td>{t(kindLabel(c.kind))}</td>
                   <td><Pill kind="red">{c.version || '—'}</Pill></td>
                   <td>{c.supplier || '—'}</td>
@@ -718,7 +805,7 @@ function DependencyPath({ componentId, componentName, ziel }) {
   const direkt = pfad[0]
   return (
     <>
-      <div className="fieldlab">{t('Wird hereingezogen über')}</div>
+      <div className="fieldlab">{t('Wird hereingezogen über')}<HelpDot text={t('Über welche eurer direkten Abhängigkeiten dieses Paket hereinkommt.')} /></div>
       <div className="deppath">
         <span className="depnode root" title={t('Euer Produkt')}>{product?.name || t('Produkt')}</span>
         {pfad.map((c, i) => (
@@ -734,9 +821,9 @@ function DependencyPath({ componentId, componentName, ziel }) {
         {t('Produkt → direkt eingebunden → … → verwundbare Komponente')}
       </div>
       <div className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
-        <b>{componentName}</b> {t('steht nicht in der package.json und lässt sich nicht einzeln austauschen.')}
+        <b>{componentName}</b> {t('habt ihr nicht direkt eingebunden — es lässt sich nicht einzeln austauschen.')}
         {ziel
-          ? <> {t('Nötig ist eine Fassung von')} <b>{direkt.name}</b>, {t('die')} <b>{componentName} {ziel}</b> {t('oder neuer mitbringt.')}</>
+          ? <> {t('Ihr braucht eine Version von')} <b>{direkt.name}</b>{t(', die')} <b>{componentName} {ziel}</b> {t('oder neuer enthält.')}</>
           : <> {t('Ansatzpunkt ist die direkte Abhängigkeit')} <b>{direkt.name}</b>.</>}
       </div>
     </>
@@ -747,7 +834,7 @@ function DependencyPath({ componentId, componentName, ziel }) {
 function FilterRow({ label, children }) {
   return (
     <div style={{ marginTop: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#808E9C', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>{label}</div>
+      <div className="fieldlab" style={{ margin: '0 0 8px' }}>{label}</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{children}</div>
     </div>
   )
@@ -765,7 +852,7 @@ function Chip({ active, count, disabled, dot, onClick, children }) {
 
 function FilterDrawer({ tab, f, set, counts, onClose }) {
   const t = useT()
-  const reset = () => set({ kind: null, compSev: null, compDd: false, compDirect: null, sev: null, vex: null, fix: null })
+  const reset = () => set({ kind: null, compSev: null, compDd: false, compDirect: null, artifact: null, sev: null, vex: null, fix: null })
   const activeCount = Object.values(f).filter(v => v !== null && v !== false).length
   return (
     <Drawer onClose={onClose}>
@@ -790,7 +877,7 @@ function FilterDrawer({ tab, f, set, counts, onClose }) {
           <Chip active={f.compDirect === 'transitive'} count={counts.transitive} disabled={!counts.transitive}
             onClick={() => set({ compDirect: f.compDirect === 'transitive' ? null : 'transitive' })}>{t('Transitiv')} </Chip>
         </FilterRow>
-        <FilterRow label={t('Schwachstellen an der Komponente')}>
+        <FilterRow label={t('Funde an der Komponente')}>
           <Chip active={!f.compSev} onClick={() => set({ compSev: null })}>{t('Alle')} </Chip>
           {SEVS.filter(([k]) => k !== '—').map(([k, label, col]) => (
             <Chip key={k} active={f.compSev === k} count={counts.compSev[k]} disabled={!counts.compSev[k]} dot={col}
@@ -838,9 +925,9 @@ function FilterDrawer({ tab, f, set, counts, onClose }) {
         <FilterRow label={t('Behebung')}>
           <Chip active={!f.fix} onClick={() => set({ fix: null })}>{t('Alle')} </Chip>
           <Chip active={f.fix === 'has'} count={counts.fixHas} disabled={!counts.fixHas}
-            onClick={() => set({ fix: f.fix === 'has' ? null : 'has' })}>{t('Fix verfügbar')} </Chip>
+            onClick={() => set({ fix: f.fix === 'has' ? null : 'has' })}>{t('Behebung verfügbar')} </Chip>
           <Chip active={f.fix === 'none'} count={counts.fixNone} disabled={!counts.fixNone}
-            onClick={() => set({ fix: f.fix === 'none' ? null : 'none' })}>{t('Kein Fix')} </Chip>
+            onClick={() => set({ fix: f.fix === 'none' ? null : 'none' })}>{t('Keine Behebung')} </Chip>
         </FilterRow>
       </>}
     </Drawer>
@@ -853,12 +940,12 @@ function ScanHistoryModal({ scans, onClose }) {
   return (
     <Modal onClose={onClose} width={620}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <span className="dtitle" style={{ flex: 1 }}>{t('Scan-Historie')}</span><CloseX onClick={onClose} />
+        <span className="dtitle" style={{ flex: 1 }}>{t('Frühere Prüfungen')}</span><CloseX onClick={onClose} />
       </div>
-      <div className="dsub">{t('Jeder Abgleich wird protokolliert — wann er lief, wie viele Komponenten geprüft wurden und was dabei herauskam.')}</div>
+      <div className="dsub">{t('Hier steht jede Prüfung: wann sie lief, wie viele Komponenten geprüft wurden und was sie gefunden hat.')}</div>
       {scans.length ? (
         <table className="tbl" style={{ marginTop: 12 }}>
-          <thead><tr><th>{t('Zeitpunkt')}</th><th>{t('Quelle')}</th><th>{t('Geprüft')}</th><th>{t('Neu')}</th><th>{t('Aktualisiert')}</th></tr></thead>
+          <thead><tr><th>{t('Zeitpunkt')}</th><th>{t('Quelle')}</th><th>{t('Komponenten')}</th><th>{t('Neu')}</th><th>{t('Aktualisiert')}</th></tr></thead>
           <tbody>
             {scans.map(sc => (
               <tr key={sc.id}>
@@ -871,7 +958,7 @@ function ScanHistoryModal({ scans, onClose }) {
             ))}
           </tbody>
         </table>
-      ) : <div className="muted" style={{ marginTop: 14 }}>{t('Noch kein Abgleich für diese Version')}</div>}
+      ) : <div className="muted" style={{ marginTop: 14 }}>{t('Noch keine Prüfung für diese Version')}</div>}
     </Modal>
   )
 }
@@ -883,9 +970,11 @@ function OwnerPicker() {
   const [open, setOpen] = useState(false)
   const [val, setVal] = useState(product?.owner || '')
   const [bis, setBis] = useState(product?.support_until || '')
+  const [pom, setPom] = useState(product?.placed_on_market || '')
   const ref = useRef(null)
   React.useEffect(() => { setVal(product?.owner || '') }, [product?.owner])
   React.useEffect(() => { setBis(product?.support_until || '') }, [product?.support_until])
+  React.useEffect(() => { setPom(product?.placed_on_market || '') }, [product?.placed_on_market])
   React.useEffect(() => {
     if (!open) return
     const away = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -894,12 +983,13 @@ function OwnerPicker() {
   }, [open])
 
   const save = async () => {
-    await call('PATCH', '/api/products/' + product.id, { owner: val.trim(), support_until: bis })
+    await call('PATCH', '/api/products/' + product.id, { owner: val.trim(), support_until: bis, placed_on_market: pom })
     await reloadProducts()
     setOpen(false)
   }
-  // Art. 13 Abs. 8: mindestens fuenf Jahre, kuerzer nur bei kuerzerer Nutzungsdauer.
-  const jahreBis = bis ? (new Date(bis + '-01') - Date.now()) / (365.25 * 24 * 3600 * 1000) : null
+  // Art. 13 Abs. 8: mindestens fuenf Jahre AB INVERKEHRBRINGEN — nicht ab heute,
+  // sonst wandert die Warnung mit dem Kalender (Pruefbericht S12).
+  const jahreBis = bis && pom ? (new Date(bis + '-01') - new Date(pom)) / (365.25 * 24 * 3600 * 1000) : null
   const initials = (product?.owner || '').split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
@@ -919,13 +1009,19 @@ function OwnerPicker() {
           <input className="field" value={val} autoFocus placeholder={t('Name')}
             onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
 
-          <div className="fieldlab">{t('Unterstützungszeitraum bis')} <span className="fund">{t('(Monat und Jahr)')}</span></div>
+          <div className="fieldlab">{t('Inverkehrbringen am')} <span className="fund">{t('(für die Fünfjahresprüfung)')}</span></div>
+          <input type="date" className="field" value={pom} onChange={e => setPom(e.target.value)} />
+
+          <div className="fieldlab">{t('Sicherheitsupdates bis')} <span className="fund">{t('(Monat und Jahr)')}</span></div>
           <input type="month" className="field" value={bis} onChange={e => setBis(e.target.value)} />
           {jahreBis !== null && jahreBis < 5 && (
-            <div style={{ marginTop: 6 }}><Pill kind="amber">{t('unter fünf Jahren — Begründung nötig')}</Pill></div>
+            <div style={{ marginTop: 6 }}><Pill kind="amber">{t('kürzer als fünf Jahre — nur mit Begründung zulässig')}</Pill></div>
+          )}
+          {bis && !pom && (
+            <div className="muted" style={{ marginTop: 6 }}>{t('Datum des Inverkehrbringens angeben, dann wird der Zeitraum geprüft')}</div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
-            {product?.owner && <button className="hb sm" style={{ marginRight: 'auto' }} onClick={() => { setVal(''); call('PATCH', '/api/products/' + product.id, { owner: '' }).then(reloadProducts).then(() => setOpen(false)) }}>{t('Entfernen')}</button>}
+            {product?.owner && <button className="hb sm" style={{ marginRight: 'auto' }} onClick={() => { if (!confirm(t('Verantwortlichen entfernen? Gilt für alle Funde dieses Produkts.'))) return; setVal(''); call('PATCH', '/api/products/' + product.id, { owner: '' }).then(reloadProducts).then(() => setOpen(false)) }}>{t('Entfernen')}</button>}
             <button className="ab sm" onClick={save}>{t('Übernehmen')}</button>
           </div>
         </div>
@@ -951,7 +1047,7 @@ function VersionPicker() {
   const versions = product?.versions || []
   const del = async (v, e) => {
     e.stopPropagation()
-    if (!confirm(t('Version löschen?') + ' ' + v.version)) return
+    if (!confirm(t('Version {v} löschen? Komponenten, SBOMs und Funde dieser Version gehen mit verloren.').replace('{v}', v.version))) return
     await call('DELETE', '/api/versions/' + v.id, undefined, { reloadProducts: true })
     if (v.id === version?.id) {
       const rest = versions.filter(x => x.id !== v.id)
@@ -1015,7 +1111,8 @@ export default function SbomTool() {
       const res = await importSbomInto(sel.vid, file, call, t)
       const noPurl = res.components.filter(c => !c.purl).length
       setNotice({ err: false, msg: res.sboms[0].format + ' · ' + res.imported.added + ' ' + t('neu,') + ' '
-        + res.imported.updated + ' ' + t('aktualisiert), Original archiviert')
+        + res.imported.updated + ' ' + t('aktualisiert — Original archiviert')
+        + (res.imported.removed ? ' · ' + res.imported.removed + ' ' + t('entfernt') : '')
         + (noPurl ? ' · ' + noPurl + ' ' + t('ohne purl') : '') })
       setTab('komponenten')
     } catch (e) { setNotice({ err: true, msg: String(e.message || e) }) }
@@ -1027,17 +1124,6 @@ export default function SbomTool() {
       setScanBanner(res.scan)
       setTab('funde')
     } catch { /* Fehlermeldung kommt über notice */ }
-  }
-
-  const delVersion = async () => {
-    if (!confirm(t('Version löschen') + ': ' + version.version + '?')) return
-    await call('DELETE', '/api/versions/' + version.id, undefined, { reloadProducts: true })
-    setSel({ pid: product.id })
-  }
-  const delProduct = async () => {
-    if (!confirm(t('Produkt löschen') + ': ' + product.name + '?')) return
-    await call('DELETE', '/api/products/' + product.id, undefined, { reloadProducts: true })
-    setSel({})
   }
 
   // ---------- Abgeleitete Daten ----------
@@ -1055,7 +1141,7 @@ export default function SbomTool() {
   // und direkte Abhaengigkeiten. Transitive Pakete waehlt niemand aus.
   const ddRelevant = c => c.kind === 'hardware' || c.kind === 'software_zukauf' || !!c.is_direct
   const ddOpen = c => ddRelevant(c) && c.dd_status !== 'geprueft'
-  const hasFix = f => !!f.fixed_versions && !f.fixed_versions.startsWith('kein Fix')
+  const hasFix = f => !!f.fixed_versions
   const filterCounts = {
     kind: Object.fromEntries(KINDS.map(([k]) => [k, components.filter(c => c.kind === k).length])),
     direct: components.filter(c => !!c.is_direct).length,
@@ -1073,8 +1159,8 @@ export default function SbomTool() {
     ohneArtefakt: components.filter(c => !(c.artifact || '').trim()).length,
     sev: sevCounts,
     vex: Object.fromEntries(VEX_STATI.map(([v]) => [v, findings.filter(f => f.vex_status === v).length])),
-    fixHas: findings.filter(f => !!f.fixed_versions && !f.fixed_versions.startsWith('kein Fix')).length,
-    fixNone: findings.filter(f => !f.fixed_versions || f.fixed_versions.startsWith('kein Fix')).length,
+    fixHas: findings.filter(f => !!f.fixed_versions).length,
+    fixNone: findings.filter(f => !f.fixed_versions).length,
   }
   const compRows = components
     .filter(c => !filter.kind || c.kind === filter.kind)
@@ -1098,7 +1184,7 @@ export default function SbomTool() {
       <TitleBar title={t('SBOM & Komponenten')} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#0B1928' }}>{t('Noch kein Produkt angelegt')}</div>
-        <div className="muted" style={{ maxWidth: 500, textAlign: 'center', lineHeight: 1.7 }}>{t('Komponenten, SBOMs und Funde hängen an der Produktversion. Lege ein Produkt mit seiner ersten Version an und importiere anschließend die SBOM, die dein Build erzeugt hat — eine Beispiel-SBOM liegt im Ordner')}<code>sboms/</code>.
+        <div className="muted" style={{ maxWidth: 500, textAlign: 'center', lineHeight: 1.7 }}>{t('Komponenten, SBOMs und Funde hängen an der Produktversion. Lege ein Produkt mit seiner ersten Version an — danach importierst du die SBOM, die dein Build erzeugt.')}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
           <button className="ab" onClick={() => setModal('produkt')}>{t('Neues Produkt anlegen')}</button>
@@ -1118,10 +1204,11 @@ export default function SbomTool() {
             {t('Filter')}{activeFilters ? ' (' + activeFilters + ')' : ''}
           </button>
         )}
-        <button className="hb" onClick={runScan} disabled={busy || !components.some(c => c.purl && c.kind !== 'hardware')}>
-          {busy ? t('Bitte warten …') : t('CVE-Abgleich (OSV)')}
+        <button className="hb" onClick={runScan} disabled={busy || !components.some(c => c.purl && c.kind !== 'hardware')}
+          title={!components.some(c => c.purl && c.kind !== 'hardware') ? t('Erst möglich, wenn Software mit purl im Inventar steht') : undefined}>
+          {busy ? t('Bitte warten …') : t('Auf Schwachstellen prüfen')}
         </button>
-        <button className="hb" onClick={() => setModal('scans')} disabled={!version}>{t('Scan-Historie')}</button>
+        <button className="hb" onClick={() => setModal('scans')} disabled={!version}>{t('Frühere Prüfungen')}</button>
         <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }}
           onChange={e => { if (e.target.files[0]) importSbom(e.target.files[0]); e.target.value = '' }} />
       </TitleBar>
@@ -1135,43 +1222,44 @@ export default function SbomTool() {
         <VersionPicker />
         <OwnerPicker />
         <button className="hb sm" onClick={() => setModal('version')}>{t('+ Version')}</button>
+        <button className="hb sm" onClick={() => setModal('produkt')}>{t('+ Produkt')}</button>
         <span style={{ flex: 1 }} />
-        {scanBanner && <Pill kind="green">{t('Abgleich abgeschlossen — SBOM-Komponenten:')} {scanBanner.scanned} · {t('neu:')} {scanBanner.added} · {t('aktualisiert:')} {scanBanner.updated}</Pill>}
-        {!scanBanner && lastScan && <span className="muted">{t('Letzter Abgleich:')} {fmtDT(lastScan.ran_at)} · {lastScan.source} · {lastScan.components_scanned} {t('Komponenten geprüft')}</span>}
-        {!scanBanner && !lastScan && <span className="muted">{t('Noch kein Abgleich für diese Version')}</span>}
+        {scanBanner && <Pill kind="green">{t('Prüfung fertig —')} {scanBanner.scanned} {t('Komponenten geprüft ·')} {scanBanner.added} {t('neue Funde ·')} {scanBanner.updated} {t('aktualisierte Funde')}</Pill>}
+        {!scanBanner && lastScan && <span className="muted">{t('Letzte Prüfung:')} {fmtDT(lastScan.ran_at)} · {lastScan.source} · {lastScan.components_scanned} {t('Komponenten geprüft')}</span>}
+        {!scanBanner && !lastScan && <span className="muted">{t('Noch keine Prüfung für diese Version')}</span>}
       </div>
 
       {/* Kennzahlen je Version */}
       <div style={{ display: 'flex', gap: 14, padding: '14px 16px 0', flexWrap: 'wrap' }}>
         <div className="kpi">
-          <div className="l">{t('Komponenteninventar (HW + SW)')}</div>
+          <div className="l">{t('Komponenten')}</div>
           <div className="v">{components.length}</div>
           <div className="s">{hw} {t('Hardware ·')} {components.length - hw} {t('Software (SBOM)')}</div>
         </div>
         <div className="kpi">
-          <div className="l">{t('Sorgfalt')}</div>
+          <div className="l">{t('Lieferanten geprüft')}</div>
           <div className="v">{geprueft}<span style={{ fontSize: 13, fontWeight: 500, color: '#8B95A3' }}> / {ddPool.length}</span></div>
           <div className="progress" style={{ marginTop: 7 }}><div style={{ width: (ddPool.length ? geprueft / ddPool.length * 100 : 0) + '%', background: '#27AE60' }} /></div>
-          <div className="s">{t('Drittkomponenten geprüft bzw. Eigenentwicklung')}</div>
+          <div className="s">{t('von den Komponenten, die ihr selbst ausgewählt habt')}</div>
         </div>
         <div className="kpi">
-          <div className="l">{t('Schwachstellen (offene Funde)')}</div>
+          <div className="l">{t('Funde insgesamt')}</div>
           <div className="v">{findings.length}</div>
           <div className="sevbar">
-            {SEVS.map(([k, , c]) => sevCounts[k] > 0 && <div key={k} style={{ flex: sevCounts[k], background: c }} title={k + ': ' + sevCounts[k]} />)}
+            {SEVS.map(([k, lbl, c]) => sevCounts[k] > 0 && <div key={k} style={{ flex: sevCounts[k], background: c }} title={t(lbl) + ': ' + sevCounts[k]} />)}
             {!findings.length && <div style={{ flex: 1, background: '#EFF3F8' }} />}
           </div>
           <div className="s">{sevCounts.KRITISCH} {t('kritisch ·')} {sevCounts.HOCH} {t('hoch ·')} {sevCounts.MITTEL} {t('mittel ·')} {sevCounts.NIEDRIG} {t('niedrig')}</div>
         </div>
         <div className="kpi">
-          <div className="l">{t('Triage (Betroffenheit bewertet)')}</div>
+          <div className="l">{t('Betroffenheit bewertet')}</div>
           <div className="v">{triaged}<span style={{ fontSize: 13, fontWeight: 500, color: '#8B95A3' }}> / {findings.length}</span></div>
           <div className="progress" style={{ marginTop: 7 }}><div style={{ width: (findings.length ? triaged / findings.length * 100 : 0) + '%', background: '#1298ff' }} /></div>
           <div className="s">{findings.filter(f => f.actively_exploited).length} {t('aktiv ausgenutzt')}</div>
         </div>
       </div>
 
-      {notice && <div style={{ padding: '10px 16px 0' }}><Pill kind={notice.err ? 'red' : 'green'}>{notice.msg}</Pill> <span className="link" style={{ fontSize: 12 }} onClick={() => setNotice(null)}>{t('ausblenden')}</span></div>}
+      {notice && <div style={{ padding: '10px 16px 0' }}><Pill kind={notice.err ? 'red' : 'green'}>{t(notice.msg)}</Pill> <span className="link" style={{ fontSize: 12 }} onClick={() => setNotice(null)}>{t('ausblenden')}</span></div>}
 
       <div className="tabrow">
         <span className={'tabpill' + (tab === 'komponenten' ? ' active' : '')} onClick={() => setTab('komponenten')}>{t('Komponenten')} ({compRows.length !== components.length ? compRows.length + ' / ' : ''}{components.length})</span>
@@ -1183,9 +1271,13 @@ export default function SbomTool() {
 
       {/* ---------- Reiter 1: Komponenten (Inventar = Obermenge, Abschnitt 1.6) ---------- */}
       {tab === 'komponenten' && <>
-        <div className="tblwrap sc">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
+          <span className="muted" style={{ flex: 1 }}>{t('Software kommt über den SBOM-Import; Hardware und Zukauf legst du hier an.')}</span>
+          <button className="ab sm" onClick={() => setCompOpen('neu')} disabled={!version}>{t('+ Komponente')}</button>
+        </div>
+        <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
-            <thead><tr><th style={{ width: '28%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Schwachstellen')}</th><th>{t('Sorgfalt')}</th></tr></thead>
+            <thead><tr><th style={{ width: '28%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Funde')}</th><th>{t('Sorgfalt')}</th></tr></thead>
             <tbody>
               {compRows.map(c => {
                 const fs = findingsByComp[c.id] || []
@@ -1197,17 +1289,17 @@ export default function SbomTool() {
                     <td>
                       <span style={{ display: 'block', fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
                       <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
-                        {c.purl || c.cpe || (c.kind === 'hardware' ? 'Lieferantenweg — keine purl' : 'ohne purl — nicht OSV-abgleichbar')}
+                        {c.purl ? pshow(c.purl) : c.cpe || (c.kind === 'hardware' ? t('Hardware — kein automatischer Abgleich') : t('ohne Paket-Kennung — wird bei der Prüfung übersprungen'))}
                       </span>
                     </td>
-                    <td><Pill kind={kindColor}>{t(kindLabel)}</Pill>{!!c.is_direct && <span className="muted" style={{ marginLeft: 6 }}>{t('direkt')}</span>}{!!c.is_core_function && <span className="muted" style={{ marginLeft: 6 }}>{t('Kernfunktion')}</span>}</td>
+                    <td><Pill kind={kindColor}>{t(kindLabel)}</Pill></td>
                     <td>{c.version || '—'}</td>
 
                     <td>
                       {fs.length === 0
-                        ? <span className="muted">{c.kind === 'hardware' ? 'über Advisories' : 'keine bekannt'}</span>
+                        ? <span className="muted">{c.kind === 'hardware' ? t('prüfen wir nicht automatisch') : t('keine bekannt')}</span>
                         : <span style={{ display: 'inline-flex', gap: 5 }}>
-                            {SEVS.map(([k, , col]) => grp[k] ? <span key={k} className="sevbadge" style={{ background: col }} title={k}>{grp[k]}</span> : null)}
+                            {SEVS.map(([k, lbl, col]) => grp[k] ? <span key={k} className="sevbadge" style={{ background: col }} title={t(lbl)}>{grp[k]}</span> : null)}
                           </span>}
                     </td>
                     <td>
@@ -1219,7 +1311,7 @@ export default function SbomTool() {
                 )
               })}
               {!compRows.length && <tr><td colSpan={5} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
-                {components.length ? 'Keine Komponenten für diesen Filter.' : 'Noch keine Komponenten — SBOM importieren oder Hardware/Software manuell anlegen.'}</td></tr>}
+                {components.length ? (q ? t('Keine Treffer für die Suche.') : t('Keine Komponenten für diesen Filter.')) : t('Noch keine Komponenten — im Reiter SBOMs eine SBOM importieren oder mit „+ Komponente“ Hardware anlegen.')}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1239,7 +1331,7 @@ export default function SbomTool() {
                 <tr key={s.id} className="row" onClick={() => setSbomOpen(s)}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{s.file_name}</span></td>
                   <td><Pill kind="blue">{s.format}</Pill></td>
-                  <td>{s.depth === 'top_level' ? 'oberste Abhängigkeiten' : 'vollständig'}</td>
+                  <td>{s.depth === 'top_level' ? t('Nur direkte Abhängigkeiten') : t('Alle Abhängigkeiten')}</td>
                   <td>{s.generated_at ? fmtD(s.generated_at) : '—'}</td>
                   <td>{fmtD(s.imported_at)}</td>
                   <td>{s.component_count}</td>
@@ -1254,7 +1346,11 @@ export default function SbomTool() {
 
       {/* ---------- Reiter 3: Funde (Schwachstellen auf dem Inventar) ---------- */}
       {tab === 'funde' && <>
-        <div className="tblwrap sc">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 0' }}>
+          <span className="muted" style={{ flex: 1 }}>{t('Der Abgleich findet Software automatisch. Was per Mail, Lieferanten-Advisory oder aus eigenen Tests hereinkommt, erfasst du hier.')}</span>
+          <button className="ab sm" onClick={() => setModal('fund')} disabled={!version}>{t('+ Fund erfassen')}</button>
+        </div>
+        <div className="tblwrap sc" style={{ marginTop: 10 }}>
           <table className="tbl">
             <thead><tr><th>{t('Schwere')}</th><th style={{ width: '28%' }}>{t('Schwachstelle')}</th><th>{t('Komponente')}</th><th>{t('Behebung')}</th><th>{t('Betroffenheit')}</th><th>{t('Entscheidung')}</th><th>{t('Verantwortlich')}</th></tr></thead>
             <tbody>
@@ -1264,26 +1360,26 @@ export default function SbomTool() {
                   <td>
                     <span className="link">{(f.aliases || '').split(', ').find(a => a.startsWith('CVE-')) || f.vuln_id}</span>
                     {(f.aliases || '').includes('CVE-') && <span style={{ display: 'block', fontSize: 11, color: '#B6C1CD' }}>{f.vuln_id}</span>}
-                    <span style={{ display: 'block', fontSize: 12, color: '#8B95A3' }}>{(f.summary || '').slice(0, 100)}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: '#8B95A3' }}>{(f.summary || '').slice(0, 100)}{(f.summary || '').length > 100 ? ' …' : ''}</span>
                   </td>
-                  <td>{f.component_name || '—'}</td>
+                  <td>{f.component_name || '—'}{f.component_version ? <span className="muted" style={{ marginLeft: 5 }}>{f.component_version}</span> : null}</td>
                   <td>
                     {f.fix_version
-                      ? <Pill kind="green">→ {f.fix_version}</Pill>
-                      : f.fixed_versions
-                        ? (f.fixed_versions.startsWith('kein Fix')
-                            ? <Pill kind="red">{t('kein Fix')}</Pill>
-                            : <span style={{ fontSize: 12.5, color: '#27AE60' }}>{f.fixed_versions.split(', ').slice(0, 2).join(', ')}</span>)
-                        : <span className="muted">—</span>}
+                      ? <Pill kind="blue">→ {f.fix_version}</Pill>
+                      : f.fix_status === 'none'
+                        ? <Pill kind="red">{t('keine Behebung')}</Pill>
+                        : f.fixed_versions
+                          ? <span style={{ fontSize: 12 }}>{f.fixed_versions.split(', ').slice(0, 2).join(', ')}{f.fixed_versions.split(', ').length > 2 ? ' …' : ''}</span>
+                          : <span className="muted">—</span>}
                   </td>
                   <td><VexPill v={f.vex_status} /></td>
                   <td>{f.decision ? t(DECISIONS.find(d => d[0] === f.decision)?.[1] || f.decision) : <span className="muted">{t('offen')}</span>}
-                    {f.decision === 'accept' && f.accept_until && <span className="muted" style={{ display: 'block' }}>bis {fmtD(f.accept_until)}</span>}</td>
+                    {f.decision === 'accept' && f.accept_until && <span className="muted" style={{ display: 'block' }}>{t('bis')} {fmtD(f.accept_until)}</span>}</td>
                   <td>{f.owner || (product?.owner ? <span className="muted" title={t('vom Produkt übernommen')}>{product.owner}</span> : <span className="muted">—</span>)}</td>
                 </tr>
               ))}
               {!findRows.length && <tr><td colSpan={7} style={{ color: '#B6C1CD', textAlign: 'center', padding: 30 }}>
-                {findings.length ? 'Keine Funde für diesen Filter.' : 'Noch keine Funde — oben „CVE-Abgleich (OSV)" starten (Software mit purl nötig).'}</td></tr>}
+                {findings.length ? (q ? t('Keine Treffer für die Suche.') : t('Keine Funde für diesen Filter.')) : t('Noch keine Funde — oben „Auf Schwachstellen prüfen“ starten oder einen Fund erfassen.')}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1296,7 +1392,9 @@ export default function SbomTool() {
       {modal === 'version' && <NewVersionModal onClose={() => setModal(null)} />}
       {modal === 'filter' && <FilterDrawer tab={tab} f={filter} set={setFilter} counts={filterCounts} onClose={() => setModal(null)} />}
       {modal === 'scans' && <ScanHistoryModal scans={data?.scans || []} onClose={() => setModal(null)} />}
-      {compOpen && <ComponentDrawer comp={compOpen === 'neu' ? null : compOpen} onClose={() => setCompOpen(null)} />}
+      {modal === 'fund' && <NewFindingModal onClose={() => setModal(null)} />}
+      {compOpen && <ComponentDrawer comp={compOpen === 'neu' ? null : compOpen} onClose={() => setCompOpen(null)}
+        onOpenFinding={x => { setCompOpen(null); setFindOpen(x) }} />}
       {findOpen && <FindingDrawer finding={findOpen} onClose={() => setFindOpen(null)} />}
       {sbomOpen && <SbomDrawer sbom={sboms.find(s => s.id === sbomOpen.id) || sbomOpen} onClose={() => setSbomOpen(null)} />}
     </main>
