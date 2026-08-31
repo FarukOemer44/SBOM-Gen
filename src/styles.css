@@ -146,7 +146,8 @@ a.link, .link { color: #1298ff; font-weight: 500; cursor: pointer; text-decorati
 .depnode.last { background: #FEF2F2; color: #DC2626; font-weight: 600; }
 .deparrow { color: #C2CCD8; font-size: 12px; }
 .depnode.root { background: #EDF2FA; color: #0B1928; font-weight: 600; }
-.hb.sm.empfohlen { border-color: #27AE60; color: #27AE60; }
+/* Empfehlung ist kein Zustand: neutral hervorheben, nicht gruen (gruen = erledigt) */
+.hb.sm.empfohlen { background: #F1F2F4; font-weight: 600; }
 .hb.active { border-color: #1298ff; color: #1298ff; background: rgba(18,152,255,0.06); }
 
 /* Fragezeichen-Kreis mit eigener Sprechblase (D-037) */

@@ -170,7 +170,8 @@ const EN = {
   'Produkt → direkt eingebunden → … → verwundbare Komponente':
     'product → direct dependency → … → vulnerable component',
   'Eingebaut ist': 'Currently installed:',
-  'behoben ab': 'fixed in',
+  'empfohlen': 'recommended',
+  'Empfohlen — kleinster Sprung im gleichen Versionszweig': 'Recommended — the smallest step within the same version branch',
   'ist keine direkte Abhängigkeit und kann nicht einzeln ausgetauscht werden.':
     'is not a direct dependency and cannot be replaced on its own.',
   'Erforderlich ist eine Version von': 'What is required is a release of',

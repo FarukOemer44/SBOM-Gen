@@ -441,6 +441,8 @@ function FindingDrawer({ finding, onClose }) {
   const T = (de, en) => (lang === 'en' ? en : de)
   const { call, product, version } = useStore()
   const [f, set, saved, apply] = useAutoSave('/api/findings/' + finding.id, { ...finding }, call)
+  // Empfehlung einmal berechnen — sie wird im Satz und an den Versionsknoepfen gebraucht.
+  const empfohlen = empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', ').filter(Boolean))
   const advisory = () => {
     // Advisory-Entwurf (Anhang I Teil II Nr. 4) — Entwurf herunterladen; veröffentlichen muss der Hersteller.
     const md = [
@@ -502,8 +504,7 @@ function FindingDrawer({ finding, onClose }) {
       {f.component_version && (
         <div className="muted" style={{ marginBottom: 8, lineHeight: 1.6 }}>
           {t('Eingebaut ist')} <b>{f.component_name} {f.component_version}</b>
-          {empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', ').filter(Boolean))
-            && <> · {t('behoben ab')} <b style={{ color: '#27AE60' }}>{f.component_name} {empfohleneFixVersion(f.component_version, f.fixed_versions.split(', '))}</b></>}
+          {empfohlen && <> · {t('empfohlen')} <b style={{ color: '#0B1928' }}>{f.component_name} {empfohlen}</b></>}
         </div>
       )}
       {f.fix_status === 'none'
@@ -513,9 +514,10 @@ function FindingDrawer({ finding, onClose }) {
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span className="muted">{t('Behoben in:')}</span>
               {f.fixed_versions.split(', ').map(v => (
-                <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '')
-                  + (v === empfohleneFixVersion(f.component_version, f.fixed_versions.split(', ')) ? ' empfohlen' : '')}
-                  title={f.fix_version === v ? t('Zielversion entfernen') : t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
+                <button key={v} className={'hb sm' + (f.fix_version === v ? ' active' : '') + (v === empfohlen ? ' empfohlen' : '')}
+                  title={f.fix_version === v ? t('Zielversion entfernen')
+                    : v === empfohlen ? t('Empfohlen — kleinster Sprung im gleichen Versionszweig')
+                      : t('Als Zielversion übernehmen — Entscheidung wird „Sofort beheben“')}
                   onClick={() => apply(f.fix_version === v
                     ? { fix_version: '' }
                     : { fix_version: v, decision: f.decision || 'fix_now' })}>
@@ -526,8 +528,7 @@ function FindingDrawer({ finding, onClose }) {
             </div>
           : <span className="muted">{t('Die Meldung nennt keine behebende Version.')}</span>}
 
-      <DependencyPath componentId={f.component_id} componentName={f.component_name}
-        ziel={empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', '))} />
+      <DependencyPath componentId={f.component_id} componentName={f.component_name} ziel={empfohlen} />
 
       {f.refs_json && (() => {
         let refs = []
@@ -755,33 +756,33 @@ function DiffTab({ versionLabel }) {
         <table className="tbl">
           <thead><tr><th style={{ width: '34%' }}>{t('Komponente')}</th><th>{t('Typ')}</th><th>{t('Version')}</th><th>{t('Lieferant')}</th></tr></thead>
           <tbody>
-            <Section title={t('Neu hinzugekommen')} kind="green" rows={diff.added}
+            <Section title={t('Neu hinzugekommen')} kind="blue" rows={diff.added}
               render={(c, i) => (
                 <tr key={'a' + i}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
                     <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl ? pshow(c.purl) : '—'}</span></td>
                   <td>{t(kindLabel(c.kind))}</td>
-                  <td><Pill kind="green">{c.version || '—'}</Pill></td>
+                  <td><Pill kind="blue">{c.version || '—'}</Pill></td>
                   <td>{c.supplier || '—'}</td>
                 </tr>
               )} />
-            <Section title={t('Version geändert')} kind="amber" rows={diff.changed}
+            <Section title={t('Version geändert')} kind="blue" rows={diff.changed}
               render={(c, i) => (
                 <tr key={'c' + i}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
                     <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl ? pshow(c.purl) : '—'}</span></td>
                   <td>{t(kindLabel(c.kind))}</td>
-                  <td><Pill kind="amber">{c.from} → {c.to}</Pill></td>
+                  <td><Pill kind="blue">{c.from} → {c.to}</Pill></td>
                   <td>{c.supplier || '—'}</td>
                 </tr>
               )} />
-            <Section title={t('Entfernt')} kind="red" rows={diff.removed}
+            <Section title={t('Entfernt')} kind="neutral" rows={diff.removed}
               render={(c, i) => (
                 <tr key={'r' + i}>
                   <td><span style={{ fontWeight: 500, color: '#0B1928' }}>{c.name}</span>
                     <span style={{ display: 'block', fontSize: 11.5, color: '#8B95A3' }}>{c.purl ? pshow(c.purl) : '—'}</span></td>
                   <td>{t(kindLabel(c.kind))}</td>
-                  <td><Pill kind="red">{c.version || '—'}</Pill></td>
+                  <td><Pill kind="neutral">{c.version || '—'}</Pill></td>
                   <td>{c.supplier || '—'}</td>
                 </tr>
               )} />
