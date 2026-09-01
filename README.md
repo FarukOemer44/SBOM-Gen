@@ -10,6 +10,107 @@ down, the scan fails with an error instead of inventing results.
 
 ---
 
+## What the module covers
+
+One screen, four tabs. **Those four are the whole module.** The product and version pickers above
+them — `+ Version` included — are in the app because every list needs a version to hang on;
+managing products and versions belongs to a different module and is not described here.
+
+| Tab | The question it answers | Requirement behind it |
+|---|---|---|
+| **Components** | What is inside this product version? | Annex I Part II No. 1 · Art. 13(5) |
+| **SBOMs** | Which machine-readable list proves it, and when was it generated? | Annex I Part II No. 1 · Annex VII No. 8 |
+| **Findings** | Which vulnerabilities sit in those components, and what was decided about each one? | Annex I Part II No. 1, 2 and 4 · Art. 13(6), 13(7) · Art. 14 |
+| **Changes** | What moved between this version and the one before it? | supports Art. 13(5) |
+
+---
+
+### Components — the inventory
+
+![The component inventory: type, version, findings count and due diligence status per component](docs/01-components.png)
+
+Every component of one product version in a single list. The inventory is a **superset of the
+SBOM**: software arrives through the import, hardware and purchased components are entered by hand,
+and an import never deletes a hand-added entry. Each row carries type, version, supplier, its
+findings count and a due diligence status.
+
+- **Built from** — React 19 for the table and the drawer, better-sqlite3 for the `components` and
+  `component_edges` tables. No grid library, no state library. The dependency path of a
+  transitive component (`GET /api/components/:id/path`) loads that version's edges in one query and
+  then walks them backwards to the root breadth-first — shortest path, thirty lines of JavaScript,
+  no graph library.
+- **Covers** — *Annex I Part II No. 1*: identify and document the components contained in the
+  product. Recording type and supplier per component is also what makes *Art. 13(5)* due diligence
+  attachable to a specific entry instead of to the product as a whole.
+
+---
+
+### SBOMs — the machine-readable proof
+
+![The SBOM tab: file, format, generation date, import date and component count](docs/02-sboms.png)
+
+Every imported file with its format, the date the generator stamped into it, the date it was
+imported, and how many distinct components it contributed. The **original JSON is stored
+byte-for-byte** and can be downloaded again (`GET /api/sboms/:id/download`) — the tool never hands
+back a re-serialised version of someone else's document.
+
+- **Built from** — a hand-written parser, about 40 lines in `src/pages/SbomTool.jsx`, reading
+  **CycloneDX** (`components[]`, nested, plus `dependencies[]` over `bom-ref`) and **SPDX**
+  (`packages[]`, plus `relationships[]` of type `DEPENDS_ON`, purl taken from `externalRefs`).
+  No CycloneDX or SPDX library is involved — see [below](#what-is-deliberately-not-a-library).
+- **Covers** — *Annex I Part II No. 1*: an SBOM in a commonly used, machine-readable format
+  covering at least the top-level dependencies. *Annex VII No. 8*: the SBOM belongs to the technical
+  documentation and may have to be handed to an authority on a reasoned request — which is why the
+  original file is kept rather than a normalised copy. *Art. 13(24)*: the Commission may prescribe
+  format and elements later, so the tool records the format and does not enforce one.
+
+---
+
+### Findings — vulnerabilities and their triage
+
+![The findings tab: severity, vulnerability, component, remediation, affected status, decision and owner](docs/03-findings.png)
+
+One row per (vulnerability, component) pair, produced by matching the inventory against OSV.dev.
+Opening a row gives the triage drawer: affected status, decision, owner, the point of awareness,
+whether the vulnerability is actively exploited, and whether it was reported upstream.
+
+![The triage drawer for a fixed finding](docs/05-triage-drawer.png)
+
+- **Built from** — the [OSV.dev](https://osv.dev) API over two endpoints, called from the server
+  only, via Node's built-in `fetch` — no HTTP client library. The CVSS 3.x base score is computed
+  locally from the vector string. Details: [External data sources](#external-data-sources).
+- **Covers**
+  - *Annex I Part II No. 1* — identify and document the vulnerabilities contained in the product.
+  - *Annex I Part II No. 2* — handle and remediate without delay. The decision, its rationale and
+    the target version are what makes "without delay" provable after the fact.
+  - *Annex I Part II No. 4* — once an update is available, publish information about the fixed
+    vulnerability. The drawer produces a **draft** advisory; publishing stays the manufacturer's act.
+  - *Art. 13(6)* — vulnerabilities in third-party components must be reported to their maintainer,
+    open source included, and a fix that was produced must be shared. Two fields and a toggle.
+  - *Art. 13(7)* — systematic documentation of security-relevant activity: every field change is
+    written to `audit_log` with its old and new value.
+  - *Art. 3(42)* and *Art. 14* — "actively exploited" is a manual flag that demands written
+    evidence and is never inferred from a CVSS score; the point of awareness is captured as its own
+    timestamp because it is what starts the reporting clocks.
+
+---
+
+### Changes — what moved between two versions
+
+![The changes tab: newly added, removed and version-changed components against the previous version](docs/04-changes.png)
+
+An automatic comparison against the previous version of the same product — nothing is maintained by
+hand. It reports newly added, removed, version-changed and unchanged components.
+
+- **Built from** — no library at all. Two SQL reads plus purl matching: identical purls cancel out
+  first, and only the remainder is paired per package into "version changed". Matching on the
+  package name alone would invent downgrades wherever an npm tree carries the same package twice.
+- **Covers** — not a requirement of its own. It supports *Art. 13(5)*: due diligence has to be
+  exercised when third-party components are integrated, and this is the list of what actually
+  entered the product in this release.
+
+---
+
 ## Quick start
 
 ```bash
@@ -26,7 +127,7 @@ an empty one and you can walk through the flow below yourself.
 
 ### Walking the flow yourself (5 minutes, on an empty database)
 
-1. **Create a product.** Click *Neues Produkt anlegen*, e.g. `ACME IoT Gateway`, version `2.4.0`.
+1. **Create a product.** Click *Create a product*, e.g. `ACME IoT Gateway`, version `2.4.0`.
 2. **Import the SBOM.** Either attach it right in the product dialog, or open the *SBOMs* tab and
    import [`sboms/acme-iot-gateway.cdx.json`](sboms/acme-iot-gateway.cdx.json) from this repository.
    → 951 components land in the inventory, the original file is archived. A version can hold
@@ -148,18 +249,6 @@ next to a version to delete it (the last one cannot be deleted).
 The interface also carries no legal citations. They live in this README and in the code comments,
 where they belong for a developer — the screen stays a working surface.
 
-### Language
-
-The interface ships in **German and English**. The switch sits at the bottom left of the sidebar
-(`DE` / `EN`); the choice is remembered per browser in `localStorage`.
-
-German is the source language and doubles as the translation key: `src/i18n.jsx` maps every German
-string to its English counterpart, and a missing entry falls back to the German text — visible, but
-never broken. To add a language, copy the `EN` map, translate the values and extend the switch in
-`src/Shell.jsx`. Legal citations keep their local form on both sides (`Art. 13 Abs. 5` ↔
-`Art. 13(5)`, `Anhang I Teil II Nr. 1` ↔ `Annex I Part II No. 1`), so a reader can look them up in
-the language version of the regulation they actually have open. The generated advisory draft follows
-the selected language too.
 
 ### Requirements
 
@@ -443,15 +532,119 @@ Every non-obvious rule in the code traces to a provision of Regulation (EU) 2024
 - **License analysis.** The license field is carried along, never evaluated.
 - **Internal SLA timers.** Deliberately absent: the statutory deadlines are what matter, and
   proof of acting "without delay" comes from documented triage, not from a traffic light.
-- **NVD / CISA KEV integration.** OSV covers the same ground for package dependencies and is
-  purl-native. A KEV badge would invite the false inference "no badge means not exploited"; the
-  catalogue is far from complete. Assessing exploitation stays a human decision with written
-  evidence.
+- **NVD / CISA KEV integration.** Reasoning under
+  [Deliberately not integrated](#deliberately-not-integrated).
+- **Product and version management.** The pickers and `+ Version` are in the app because the lists
+  need a version to hang on; the module itself is the four tabs.
+
+---
+
+## Open source in this module
+
+Six direct dependencies, every one of them MIT. `package-lock.json` resolves to 183 packages in
+total, almost all of them build-time. What ships to the browser is React and this repository's own
+code — nothing else.
+
+| Library | Version | Licence | What it does here |
+|---|---|---|---|
+| [express](https://github.com/expressjs/express) | 5.2.1 | MIT | the HTTP layer of `server/index.mjs`: all 20 routes and JSON body parsing (`express.json({ limit: '25mb' })` — SBOMs are large) |
+| [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) | 13.0.3 | MIT | synchronous SQLite access to the eight tables (`products`, `versions`, `components`, `component_edges`, `sboms`, `findings`, `scans`, `audit_log`). Synchronous is the point: an import writes hundreds of rows in one transaction without a callback in sight |
+| [react](https://github.com/facebook/react) · [react-dom](https://github.com/facebook/react) | 19.2.8 | MIT | the entire interface — tables, tabs, drawers, filters. Component state only, no store |
+| [vite](https://github.com/vitejs/vite) | 7.3.6 | MIT | dev server with hot reload, and the production build |
+| [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 4.7.0 | MIT | the JSX transform |
+
+No UI framework, no component library, no state library, no ORM, no HTTP client, no date library,
+no icon package. Icons are inline SVG, dates go through `Intl`, and HTTP uses Node's built-in
+`fetch` (which is why Node 18 is the floor).
+
+Beyond the runtime, one more open source tool matters: the bundled fixtures were generated with
+[`@cyclonedx/cyclonedx-npm`](https://github.com/CycloneDX/cyclonedx-node-npm), the official
+CycloneDX generator — see [The bundled SBOMs are real](#the-bundled-sboms-are-real). It is not a
+dependency of this project; it produced the files, and the files are checked in.
+
+### What is deliberately not a library
+
+Three things a reader might expect to be a dependency are written out instead. Each was a decision,
+not an oversight.
+
+| Function | Where | Why it is not a dependency |
+|---|---|---|
+| **SBOM parsing** (CycloneDX + SPDX) | `src/pages/SbomTool.jsx`, ~40 lines | The tool reads five things out of an SBOM: components, their purls, their versions, whether they are top-level, and the dependency edges. Both formats expose all five in plain JSON. A full CycloneDX or SPDX library models the whole specification — signatures, vulnerabilities, licence expressions, evidence — and would pull far more surface area into the browser bundle than the five fields justify |
+| **CVSS 3.x base score** | `server/index.mjs`, `cvss3Score()` | OSV ships the CVSS *vector* but not the score. The [FIRST base-score formula](https://www.first.org/cvss/v3.1/specification-document) is fifteen lines of arithmetic with published constants. Computing it locally keeps the number reproducible from the vector that is stored next to it |
+| **purl handling** | string comparison throughout | Package URLs are only ever compared, grouped and displayed here, never constructed or re-encoded. `===` and one `split` do the whole job |
+
+---
+
+## External data sources
+
+**Exactly one service is called.** No telemetry, no analytics, no font CDN, no error reporter.
+The browser talks only to this project's own API; outbound HTTPS happens on the server.
+
+### OSV.dev — the vulnerability data
+
+|  |  |
+|---|---|
+| Service | [OSV.dev](https://osv.dev), operated by Google with the OpenSSF — the server itself is open source ([google/osv.dev](https://github.com/google/osv.dev)) |
+| Record schema | [OSV Schema](https://github.com/ossf/osv-schema) — the format the responses come in |
+| Authentication | **none.** No API key, no account, no registration |
+| Why this one | it is purl-native. The inventory already holds purls from the SBOM, so a query needs no name-to-CPE guessing step |
+| Called from | `server/index.mjs` only — the browser never contacts OSV |
+
+**The two endpoints**
+
+| Endpoint | Method | What it is used for | How it is called |
+|---|---|---|---|
+| `https://api.osv.dev/v1/querybatch` | `POST` | one request per batch of purls, returns the vulnerability IDs per component — all of them, with no per-component cap | chunked at `QUERY_CHUNK = 400` purls per request, 30 s timeout each |
+| `https://api.osv.dev/v1/vulns/{id}` | `GET` | the full advisory record for one vulnerability | over the distinct IDs, `DETAIL_PARALLEL = 10` at a time. A failed detail request is tolerated — the finding is stored with severity `—` rather than dropped |
+
+Both constants sit at the top of `server/index.mjs`. If OSV is unreachable the endpoint answers
+`502` and changes nothing: a scan that did not happen must not look like one that did.
+
+**What is read out of a response**
+
+| Field in the OSV record | What it becomes in the finding |
+|---|---|
+| `id` | the vulnerability identifier (`GHSA-…`, `PYSEC-…`) |
+| `aliases` | the **CVE number**, shown as the primary identifier — nobody recognises `GHSA-9m93-w8w6-76hh`, everybody knows `CVE-2023-3696` |
+| `affected[].ranges[].events[].fixed` | the **fixed versions for this package**, matched by purl so other packages in the same advisory do not leak in |
+| `affected[].ranges[].events[].last_affected` | "no fix available, affected up to X" — instead of pretending a fix exists |
+| `severity[].score` (`CVSS_V3`) | the CVSS vector; the base score is computed from it locally |
+| `database_specific.severity` | the publisher's severity label, used only when no numeric score can be computed |
+| `database_specific.cwe_ids` | the weakness classes shown as chips |
+| `published` | the date the advisory was published |
+| `references` | the source links |
+
+**Covers** — *Annex I Part II No. 1*, the vulnerability half of it: identifying which vulnerabilities
+are contained in the product's components. The scan is the mechanism; the finding is the record.
+Every scan also writes a row to `scans` and one to `audit_log`, which is *Art. 13(7)*.
+
+### Links written into a finding, never fetched
+
+Four link targets are built from the OSV record and stored with the finding. They are hyperlinks in
+the drawer and lines in the advisory draft — **the tool never requests them.**
+
+| Target | URL pattern | Built from |
+|---|---|---|
+| OSV entry | `https://osv.dev/vulnerability/{id}` | the record ID |
+| GitHub Advisory | `https://github.com/advisories/{GHSA-…}` | the record ID or a GHSA alias |
+| NVD entry | `https://nvd.nist.gov/vuln/detail/{CVE-…}` | each CVE alias |
+| Fix commit, project page | as given | `references[]` of the record |
+
+**Covers** — *Annex I Part II No. 4*: the published information has to let users recognise the
+affected product, the impact and the severity. The draft advisory carries these sources so the
+reader can verify the claim rather than take it on trust.
+
+### Deliberately not integrated
+
+**NVD and the CISA KEV catalogue.** OSV covers the same ground for package dependencies and is
+purl-native. A KEV badge would invite the false inference "no badge means not exploited", and the
+catalogue is far from complete. *Art. 3(42)* defines an actively exploited vulnerability as one for
+which reliable evidence exists — that stays a human decision with written evidence, not a lookup.
 
 ---
 
 ## Stack
 
-Vite + React 19 on the front end, Express 5 + better-sqlite3 on the back end. Runtime
-dependencies: `express`, `better-sqlite3`, `react`, `react-dom`. No UI framework, no state
-library, no ORM. Hash-free single view; the styling mirrors the target product's design tokens.
+Vite + React 19 on the front end, Express 5 + better-sqlite3 on the back end. One screen, no router.
+The styling mirrors the target product's design tokens. Full dependency reasoning:
+[Open source in this module](#open-source-in-this-module).
