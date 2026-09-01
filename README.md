@@ -388,7 +388,8 @@ Record schema: [OSV Schema](https://github.com/ossf/osv-schema).
      purl so other packages in the same advisory do not leak in. Where a range only carries
      `last_affected`, the finding says so instead of pretending a fix exists.
    - `references` plus derived links → **sources**: OSV, the GitHub advisory, the NVD entry for
-     each CVE alias, the fix commit and the project page
+     each CVE alias, and the project page. How those links are made, and why the fix commit is
+     currently not among them: [Sources on a finding](#sources-on-a-finding--how-the-links-are-made)
    - `database_specific.cwe_ids` → weakness classes, and `published` → advisory date
 5. **Score locally.** The CVSS 3.x base score is computed from the vector string
    ([FIRST.org formula](https://www.first.org/cvss/v3.1/specification-document)) — OSV ships the
@@ -618,17 +619,71 @@ Both constants sit at the top of `server/index.mjs`. If OSV is unreachable the e
 are contained in the product's components. The scan is the mechanism; the finding is the record.
 Every scan also writes a row to `scans` and one to `audit_log`, which is *Art. 13(7)*.
 
-### Links written into a finding, never fetched
+### Sources on a finding — how the links are made
 
-Four link targets are built from the OSV record and stored with the finding. They are hyperlinks in
-the drawer and lines in the advisory draft — **the tool never requests them.**
+Each finding carries a handful of source links. They are hyperlinks in the drawer and lines in the
+advisory draft. **None of them is ever requested by the tool** — and no second service is queried to
+obtain them. There is one OSV response, and everything comes out of it in two different ways.
 
-| Target | URL pattern | Built from |
-|---|---|---|
-| OSV entry | `https://osv.dev/vulnerability/{id}` | the record ID |
-| GitHub Advisory | `https://github.com/advisories/{GHSA-…}` | the record ID or a GHSA alias |
-| NVD entry | `https://nvd.nist.gov/vuln/detail/{CVE-…}` | each CVE alias |
-| Fix commit, project page | as given | `references[]` of the record |
+**Constructed from an identifier.** Three of the four are plain string concatenation
+(`sourcesOf()`, `server/index.mjs`):
+
+```js
+add('OSV', 'https://osv.dev/vulnerability/' + rec.id)
+if (rec.id.startsWith('GHSA-')) add('GitHub', 'https://github.com/advisories/' + rec.id)
+for (const a of rec.aliases || []) {
+  if (a.startsWith('CVE-')) add('NVD ' + a, 'https://nvd.nist.gov/vuln/detail/' + a)
+  if (a.startsWith('GHSA-')) add('GitHub', 'https://github.com/advisories/' + a)
+}
+```
+
+Three parts to that:
+
+- **The prefix** is each service's permalink scheme — `osv.dev/vulnerability/<id>`,
+  `github.com/advisories/<GHSA>`, `nvd.nist.gov/vuln/detail/<CVE>`. Nothing derived, just the
+  address under which these three publish their entries.
+- **The identifier** is passed through from the OSV record untouched: `id`, or an entry of
+  `aliases`. Never shortened, normalised or rewritten.
+- **The `startsWith` guards** are the actual mechanism. They are not validation — they decide
+  *which service can know this identifier at all.* A `PYSEC-…` id gets no GitHub link, because
+  GitHub does not carry it.
+
+That is also why the GitHub link is not a guess: for npm, OSV's upstream **is** the GitHub Advisory
+Database, so the OSV id *is* the GHSA id. In the bundled database all 652 findings carry a `GHSA-…`
+identifier — hence 652 OSV links, 667 GitHub links and 639 NVD links, without a single lookup.
+
+A `Set` over the URL inside `add()` deduplicates, which matters because OSV usually lists the NVD
+page in `references[]` as well — the constructed link and the listed one are the same address.
+
+**Taken from the record.** Everything else comes out of `references[]` — the links the advisory
+itself carries. They are relabelled (`PACKAGE` → project page, `REPORT` → report, `ADVISORY` →
+report) and capped at twelve sources per finding.
+
+**Nothing verifies that a constructed address resolves.** No HEAD request, no fallback. In practice
+it holds — 24 stored links checked live, six per kind, all `200`. But the failure modes differ, and
+only one of them is honest:
+
+| Service | Response to an identifier it does not have |
+|---|---|
+| GitHub | `404` — visible immediately |
+| OSV | `200` with an empty page — the failure only shows in the browser |
+| NVD | `200`, redirected to the **NVD home page** — looks like a hit, is not one |
+
+That is tolerable while identifiers arrive from OSV untouched. It would stop being tolerable the
+moment someone can type an identifier by hand.
+
+Links are built once during the scan and stored in `refs_json`, not regenerated on display. A
+rescan overwrites them, so a changed permalink scheme would propagate to old findings on the next
+scan.
+
+**Known gap: fix commits do not make it through.** The filter accepts four of the eleven reference
+types in the OSV schema — `ADVISORY`, `FIX`, `REPORT`, `PACKAGE` — and drops the rest, `WEB`
+included. GitHub advisories type nearly everything as `WEB`. Measured over 40 records fetched live
+from OSV: 199 of 273 references are `WEB` and are discarded, 30 of the 40 advisories carry a commit
+or pull-request link, and **not one uses the type `FIX`**. Across all 652 stored findings the label
+"fix" therefore never appears once. The link to the commit that closes the vulnerability — the most
+concrete thing an advisory has, and the one *Annex I Part II No. 4* is most interested in — is
+currently lost. Fixing it means judging references by URL shape rather than by type.
 
 **Covers** — *Annex I Part II No. 4*: the published information has to let users recognise the
 affected product, the impact and the severity. The draft advisory carries these sources so the
