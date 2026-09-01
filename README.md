@@ -20,7 +20,7 @@ managing products and versions belongs to a different module and is not describe
 |---|---|---|
 | **Components** | What is inside this product version? | Annex I Part II No. 1 · Art. 13(5) |
 | **SBOMs** | Which machine-readable list proves it, and when was it generated? | Annex I Part II No. 1 · Annex VII No. 8 |
-| **Findings** | Which vulnerabilities sit in those components, and what was decided about each one? | Annex I Part II No. 1, 2 and 4 · Art. 13(6), 13(7) · Art. 14 |
+| **Findings** | Which vulnerabilities sit in those components, and what was decided about each one? | Annex I Part II No. 1 and 2 · Art. 13(6), 13(7) · Art. 14 |
 | **Changes** | What moved between this version and the one before it? | supports Art. 13(5) |
 
 ---
@@ -83,8 +83,6 @@ whether the vulnerability is actively exploited, and whether it was reported ups
   - *Annex I Part II No. 1* — identify and document the vulnerabilities contained in the product.
   - *Annex I Part II No. 2* — handle and remediate without delay. The decision, its rationale and
     the target version are what makes "without delay" provable after the fact.
-  - *Annex I Part II No. 4* — once an update is available, publish information about the fixed
-    vulnerability. The drawer produces a **draft** advisory; publishing stays the manufacturer's act.
   - *Art. 13(6)* — vulnerabilities in third-party components must be reported to their maintainer,
     open source included, and a fix that was produced must be shared. Two fields and a toggle.
   - *Art. 13(7)* — systematic documentation of security-relevant activity: every field change is
@@ -446,9 +444,6 @@ The drawer follows the order the work actually happens in:
    nothing more — deadlines live in the reporting module (D-036).
 4. **Upstream report** — who the vulnerability in a third-party component was reported to, when,
    and whether fix code was shared.
-5. **Advisory draft** — available once a finding is `fixed`; downloads a Markdown skeleton
-   pre-filled with the affected product and version, the remediation target and the source links.
-   Publishing stays with the manufacturer.
 
 Findings that arrive outside the scanner — an email to the security contact, a supplier advisory,
 a CSIRT notification, your own testing — are entered with `POST /api/versions/:id/findings`.
@@ -514,7 +509,6 @@ Every non-obvious rule in the code traces to a provision of Regulation (EU) 2024
 | "Actively exploited" needs reliable evidence — never inferred from CVSS | Art. 3(42) |
 | The point of awareness starts the 24 h / 72 h reporting clocks | Art. 14 |
 | Handle and remediate vulnerabilities without delay | Annex I Part II No. 2 |
-| Publish information about fixed vulnerabilities once an update is available | Annex I Part II No. 4 |
 | SBOM belongs to the technical documentation on a reasoned request | Annex VII No. 8 |
 | Where the SBOM is available is stated only if it is published to users | Annex II No. 9 |
 | Format and elements of the SBOM may be prescribed later — so the format is not enforced | Art. 13(24) |
@@ -527,8 +521,11 @@ Every non-obvious rule in the code traces to a provision of Regulation (EU) 2024
   This tool consumes them.
 - **The Article 14 reporting chain** with its calculated deadlines — a separate module. Marking a
   finding as actively exploited records the flag and its evidence; no deadline appears here (D-036).
-- **Publishing advisories and shipping updates.** The tool produces a draft and keeps the record;
-  acting is the manufacturer's job.
+- **Advisories — drafting them included.** *Annex I Part II No. 4* obliges the manufacturer to
+  publish information about a fixed vulnerability once the update is available. This module holds
+  the material that goes into such a notice — affected product and version, identifier, severity,
+  remediation and sources — but it neither composes nor publishes one. Removed deliberately
+  (D-061); the obligation is not covered anywhere in this module.
 - **Supplier master data.** Components link to supplier management, they do not replace it.
 - **License analysis.** The license field is carried along, never evaluated.
 - **Internal SLA timers.** Deliberately absent: the statutory deadlines are what matter, and
@@ -621,8 +618,8 @@ Every scan also writes a row to `scans` and one to `audit_log`, which is *Art. 1
 
 ### Sources on a finding — how the links are made
 
-Each finding carries a handful of source links. They are hyperlinks in the drawer and lines in the
-advisory draft. **None of them is ever requested by the tool** — and no second service is queried to
+Each finding carries a handful of source links. They are hyperlinks in the
+drawer. **None of them is ever requested by the tool** — and no second service is queried to
 obtain them. There is one OSV response, and everything comes out of it in two different ways.
 
 **Constructed from an identifier.** Three of the four are plain string concatenation
@@ -682,12 +679,12 @@ included. GitHub advisories type nearly everything as `WEB`. Measured over 40 re
 from OSV: 199 of 273 references are `WEB` and are discarded, 30 of the 40 advisories carry a commit
 or pull-request link, and **not one uses the type `FIX`**. Across all 652 stored findings the label
 "fix" therefore never appears once. The link to the commit that closes the vulnerability — the most
-concrete thing an advisory has, and the one *Annex I Part II No. 4* is most interested in — is
-currently lost. Fixing it means judging references by URL shape rather than by type.
+concrete thing an advisory has — is currently lost. Fixing it means judging references by URL
+shape rather than by type.
 
-**Covers** — *Annex I Part II No. 4*: the published information has to let users recognise the
-affected product, the impact and the severity. The draft advisory carries these sources so the
-reader can verify the claim rather than take it on trust.
+**Covers** — nothing on its own. The sources exist so that a reviewer can check a finding against
+its origin instead of taking the tool's word for it, and so that whoever later writes the public
+notice required by *Annex I Part II No. 4* has the material to hand.
 
 ### Deliberately not integrated
 

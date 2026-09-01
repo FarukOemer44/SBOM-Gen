@@ -100,8 +100,8 @@ const EN = {
     'The product is exposed. It needs a decision and a rationale for it.',
   'Das Produkt ist nicht angreifbar. Die Begründung dafür ist verpflichtend.':
     'The product is not exposed. A rationale for that is mandatory.',
-  'Die Schwachstelle ist behoben. Der Sicherheitshinweis lässt sich jetzt als Entwurf erzeugen.':
-    'The vulnerability is fixed. The security advisory can now be produced as a draft.',
+  'Die Schwachstelle ist behoben. Es bleibt festzuhalten, wie das geschehen ist.':
+    'The vulnerability is fixed. What remains is to record how.',
   'Ohne Begründung ist „Nicht betroffen“ nicht belegt': '“Not affected” is not substantiated without a rationale',
   'Erst möglich, wenn die Betroffenheit bewertet ist': 'Possible once the affected status has been assessed',
   'Eine Entscheidung ist erst möglich, wenn die Betroffenheit oben auf „Betroffen“ steht.':
@@ -155,7 +155,6 @@ const EN = {
   'Die Zusammensetzung wird je Version geführt.': 'Composition is tracked per version.',
   'Hardware und Software stehen im Inventar; in die SBOM gehört nur Software.':
     'Hardware and software live in the inventory; only software belongs in the SBOM.',
-  'Sicherheitshinweis (Entwurf)': 'Security advisory (draft)',
   'Herunterladen': 'Download',
   'Neu hinzugekommen': 'Newly added',
   'Komponenten, SBOMs und Funde werden je Produktversion geführt. Der SBOM-Import ist nach dem Anlegen der ersten Version möglich.':

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { useStore } from '../store.jsx'
-import { useT, useI18n } from '../i18n.jsx'
+import { useT } from '../i18n.jsx'
 import { TitleBar, SearchBox, Pill, Toggle, Drawer, Modal, CloseX, HelpDot, fmtDT, fmtD, fmtM, pshow } from '../ui.jsx'
 
 // Komponententypen (Dokument Abschnitt 1.6): Hardware steht im Inventar, nicht in der SBOM.
@@ -460,9 +460,8 @@ function ComponentDrawer({ comp, onClose, onOpenFinding }) {
 
 // ---------- Funde: Triage-Drawer ----------
 function FindingDrawer({ finding, onClose }) {
-  const { t, lang } = useI18n()
-  const T = (de, en) => (lang === 'en' ? en : de)
-  const { call, product, version } = useStore()
+  const t = useT()
+  const { call, product } = useStore()
   const [f, set, saved, apply] = useAutoSave('/api/findings/' + finding.id, { ...finding }, call)
   // Empfehlung einmal berechnen — sie wird im Satz und an den Versionsknoepfen gebraucht.
   const empfohlen = empfohleneFixVersion(f.component_version, (f.fixed_versions || '').split(', ').filter(Boolean))
@@ -479,50 +478,12 @@ function FindingDrawer({ finding, onClose }) {
     under_investigation: 'Ob das Produkt angreifbar ist, wurde noch nicht bewertet. Entscheidung und Behebung folgen danach.',
     affected: 'Das Produkt ist angreifbar. Es braucht eine Entscheidung und eine Begründung dafür.',
     not_affected: 'Das Produkt ist nicht angreifbar. Die Begründung dafür ist verpflichtend.',
-    fixed: 'Die Schwachstelle ist behoben. Der Sicherheitshinweis lässt sich jetzt als Entwurf erzeugen.',
+    fixed: 'Die Schwachstelle ist behoben. Es bleibt festzuhalten, wie das geschehen ist.',
   }[vex]
   // Wechsel auf "nicht betroffen": Entscheidung und Zielversion verlieren ihre Grundlage.
   const setVex = v => apply(v === 'not_affected'
     ? { vex_status: v, decision: '', decision_rationale: '', accept_until: '', fix_version: '', fix_note: '' }
     : { vex_status: v })
-  const advisory = () => {
-    // Advisory-Entwurf (Anhang I Teil II Nr. 4) — Entwurf herunterladen; veröffentlichen muss der Hersteller.
-    const md = [
-      T('# Sicherheitshinweis (ENTWURF) — ', '# Security advisory (DRAFT) — ') + product.name + ' ' + version.version,
-      '',
-      T('> Entwurf nach Anhang I Teil II Nr. 4 CRA — erst veröffentlichen, wenn das Update verfügbar ist.',
-        '> Draft under Annex I Part II No. 4 CRA — publish only once the security update is available.'),
-      '',
-      T('## Betroffenes Produkt', '## Affected product'),
-      T('- Produkt: ', '- Product: ') + product.name + (product.hersteller ? ' (' + product.hersteller + ')' : ''),
-      T('- Betroffene Version(en): ', '- Affected version(s): ') + version.version,
-      T('- Betroffene Komponente: ', '- Affected component: ') + (f.component_name || '—') + (f.component_purl ? ' (`' + f.component_purl + '`)' : ''),
-      '',
-      T('## Schwachstelle', '## Vulnerability'),
-      T('- Kennung: ', '- Identifier: ') + f.vuln_id + (f.aliases ? ' (' + f.aliases + ')' : ''),
-      T('- Schwere: ', '- Severity: ') + t((SEVS.find(x => x[0] === f.severity) || [, '—'])[1]) + (f.score != null ? ' (CVSS ' + Number(f.score).toFixed(1) + ')' : ''),
-      T('- Beschreibung: ', '- Description: ') + (f.summary && !f.summary.startsWith('osv.dev/') ? f.summary : T('Keine Beschreibung vorhanden — siehe Quellen.', 'No description available — see sources.')),
-      '',
-      T('## Auswirkungen und Behebung', '## Impact and remediation'),
-      T('- Status: behoben', '- Status: fixed'),
-      T('- Behebung: ', '- Remediation: ') + (f.fix_version ? f.component_name + ' ' + f.fix_version
-          : f.fix_note.trim() ? f.fix_note.trim()
-            : f.fixed_versions ? T('Version ', 'Version ') + f.fixed_versions
-              : T('[Sicherheitsaktualisierung eintragen]', '[enter the security update]')),
-      T('- Maßnahmen für Nutzer: [eindeutige, verständliche Anleitung ergänzen]',
-        '- Action for users: [add clear, understandable instructions]'),
-      '',
-      ...(f.refs_json ? ['', T('## Quellen', '## Sources'), ...(() => { try { return JSON.parse(f.refs_json).map(r => '- ' + r.label + ': ' + r.url) } catch { return [] } })()] : []),
-      '',
-      T('_Entwurf erzeugt am ', '_Draft generated on ') + new Date().toLocaleDateString(lang === 'en' ? 'en-GB' : 'de-DE')
-        + T('. Vor dem Veröffentlichen prüfen und ergänzen._', '. Review and complete before publishing._'),
-    ].join('\n')
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
-    a.download = (lang === 'en' ? 'advisory-draft-' : 'advisory-entwurf-') + f.vuln_id + '.md'
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }
   return (
     <Drawer onClose={onClose}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -691,11 +652,6 @@ function FindingDrawer({ finding, onClose }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
         <Toggle on={!!f.upstream_fix_shared} onChange={v => set('upstream_fix_shared', v ? 1 : 0)} />
         <span className="muted">{t('Korrektur oder Unterlagen weitergegeben')}</span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
-        {f.vex_status === 'fixed' && <button className="hb" onClick={advisory}>{t('Sicherheitshinweis (Entwurf)')}</button>}
-        <span style={{ flex: 1 }} />
       </div>
     </Drawer>
   )
