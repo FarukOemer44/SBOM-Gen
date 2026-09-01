@@ -132,6 +132,7 @@ for (const [col, ddl] of [
   ['mitigation_available_at', "TEXT DEFAULT ''"], // Art. 14 Abs. 2 Buchst. c: zweiter Fristanker, nur erfasst
   ['refs_json', "TEXT DEFAULT ''"],        // Advisory-Links (GitHub, NVD, OSV, Hersteller)
   ['fix_version', "TEXT DEFAULT ''"],      // vom Bearbeiter gewaehlte Zielversion
+  ['fix_note', "TEXT DEFAULT ''"],         // wie tatsaechlich behoben wurde — auch ohne Versionssprung
 ]) {
   const has = db.prepare('PRAGMA table_info(findings)').all().some(c => c.name === col)
   if (!has) db.exec(`ALTER TABLE findings ADD COLUMN ${col} ${ddl}`)
@@ -596,7 +597,7 @@ app.post('/api/versions/:id/findings', (req, res) => {
 
 const FINDING_FIELDS = ['vex_status', 'vex_justification', 'decision', 'decision_rationale', 'accept_until',
   'owner', 'became_known_at', 'actively_exploited', 'exploit_evidence',
-  'upstream_reported_to', 'upstream_reported_at', 'upstream_fix_shared', 'fix_version', 'mitigation_available_at']
+  'upstream_reported_to', 'upstream_reported_at', 'upstream_fix_shared', 'fix_version', 'fix_note', 'mitigation_available_at']
 app.patch('/api/findings/:id', (req, res) => {
   const cur = db.prepare('SELECT * FROM findings WHERE id = ?').get(req.params.id)
   if (!cur) return res.status(404).json({ error: 'nicht gefunden' })
@@ -604,10 +605,10 @@ app.patch('/api/findings/:id', (req, res) => {
   for (const k of FINDING_FIELDS) if (req.body[k] !== undefined) f[k] = req.body[k]
   db.prepare(`UPDATE findings SET vex_status=?, vex_justification=?, decision=?, decision_rationale=?, accept_until=?,
     owner=?, became_known_at=?, actively_exploited=?, exploit_evidence=?,
-    upstream_reported_to=?, upstream_reported_at=?, upstream_fix_shared=?, fix_version=?, mitigation_available_at=?, updated_at=? WHERE id=?`)
+    upstream_reported_to=?, upstream_reported_at=?, upstream_fix_shared=?, fix_version=?, fix_note=?, mitigation_available_at=?, updated_at=? WHERE id=?`)
     .run(f.vex_status, f.vex_justification, f.decision, f.decision_rationale, f.accept_until,
       f.owner, f.became_known_at, f.actively_exploited ? 1 : 0, f.exploit_evidence,
-      f.upstream_reported_to, f.upstream_reported_at, f.upstream_fix_shared ? 1 : 0, f.fix_version || '',
+      f.upstream_reported_to, f.upstream_reported_at, f.upstream_fix_shared ? 1 : 0, f.fix_version || '', f.fix_note || '',
       f.mitigation_available_at || '', now(), req.params.id)
   // Protokoll mit Inhalt: welches Feld, von was, auf was (Art. 13 Abs. 7)
   const changes = FINDING_FIELDS

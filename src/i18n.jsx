@@ -94,17 +94,23 @@ const EN = {
   'Schwachstelle': 'Vulnerability',
   'Behebung': 'Remediation',
   'Betroffenheit': 'Affected status',
-  'Die Betroffenheit ist noch nicht bewertet. Entscheidung und Behebung folgen danach.':
-    'The affected status has not been assessed yet. Decision and remediation follow after that.',
-  'Das Produkt ist angreifbar. Erforderlich sind eine Entscheidung und ihre Begründung.':
-    'The product is exposed. A decision and its rationale are required.',
-  'Das Produkt ist nicht angreifbar. Die Begründung ist Pflichtangabe.':
-    'The product is not exposed. The rationale is a required entry.',
-  'Die Schwachstelle ist behoben. Der Sicherheitshinweis kann als Entwurf erzeugt werden.':
-    'The vulnerability is fixed. The security advisory can be produced as a draft.',
+  'Ob das Produkt angreifbar ist, wurde noch nicht bewertet. Entscheidung und Behebung folgen danach.':
+    'Whether the product is exposed has not been assessed yet. Decision and remediation follow after that.',
+  'Das Produkt ist angreifbar. Es braucht eine Entscheidung und eine Begründung dafür.':
+    'The product is exposed. It needs a decision and a rationale for it.',
+  'Das Produkt ist nicht angreifbar. Die Begründung dafür ist verpflichtend.':
+    'The product is not exposed. A rationale for that is mandatory.',
+  'Die Schwachstelle ist behoben. Der Sicherheitshinweis lässt sich jetzt als Entwurf erzeugen.':
+    'The vulnerability is fixed. The security advisory can now be produced as a draft.',
   'Ohne Begründung ist „Nicht betroffen“ nicht belegt': '“Not affected” is not substantiated without a rationale',
-  'Erst nach der Bewertung der Betroffenheit': 'Available once the affected status is assessed',
+  'Erst möglich, wenn die Betroffenheit bewertet ist': 'Possible once the affected status has been assessed',
+  'Eine Entscheidung ist erst möglich, wenn die Betroffenheit oben auf „Betroffen“ steht.':
+    'A decision is only possible once the affected status above is set to “Affected”.',
   'Entscheidung': 'Decision',
+  'Wie wurde die Schwachstelle behoben?': 'How was the vulnerability fixed?',
+  'z. B. auf die behebende Version angehoben, Komponente ausgebaut, Korrektur zurückportiert':
+    'e.g. raised to the fixed version, component removed, fix backported',
+  'Ohne Angabe ist „Behoben“ nicht belegt': '“Fixed” is not substantiated without an entry',
   'Verantwortlich': 'Owner',
   'keine Behebung': 'no fix available',
   'offen': 'open',
@@ -323,7 +329,7 @@ const EN = {
   'z. B. Muster GmbH': 'e.g. Muster GmbH',
   'z. B. 1.1.0': 'e.g. 1.1.0',
   'z. B. die verwundbare Funktion wird bei uns nie aufgerufen': 'e.g. the vulnerable function is never called in our product',
-  'Einschätzung, Analyse-Stand': 'Assessment, state of analysis',
+  'Einschätzung und Stand der Analyse': 'Assessment and state of the analysis',
 
   // Fragezeichen-Erklärungen (D-037)
   'Eindeutige Kennung des Pakets. Über sie findet die Prüfung die Schwachstellen — ohne sie bleibt die Komponente ungeprüft.':

@@ -473,16 +473,17 @@ function FindingDrawer({ finding, onClose }) {
   const vex = f.vex_status
   const inPruefung = vex === 'under_investigation'
   const nichtBetroffen = vex === 'not_affected'
-  const behebbar = vex === 'affected' || vex === 'fixed'
+  const behoben = vex === 'fixed'
+  const behebbar = vex === 'affected' || behoben
   const vexHinweis = {
-    under_investigation: 'Die Betroffenheit ist noch nicht bewertet. Entscheidung und Behebung folgen danach.',
-    affected: 'Das Produkt ist angreifbar. Erforderlich sind eine Entscheidung und ihre Begründung.',
-    not_affected: 'Das Produkt ist nicht angreifbar. Die Begründung ist Pflichtangabe.',
-    fixed: 'Die Schwachstelle ist behoben. Der Sicherheitshinweis kann als Entwurf erzeugt werden.',
+    under_investigation: 'Ob das Produkt angreifbar ist, wurde noch nicht bewertet. Entscheidung und Behebung folgen danach.',
+    affected: 'Das Produkt ist angreifbar. Es braucht eine Entscheidung und eine Begründung dafür.',
+    not_affected: 'Das Produkt ist nicht angreifbar. Die Begründung dafür ist verpflichtend.',
+    fixed: 'Die Schwachstelle ist behoben. Der Sicherheitshinweis lässt sich jetzt als Entwurf erzeugen.',
   }[vex]
   // Wechsel auf "nicht betroffen": Entscheidung und Zielversion verlieren ihre Grundlage.
   const setVex = v => apply(v === 'not_affected'
-    ? { vex_status: v, decision: '', decision_rationale: '', accept_until: '', fix_version: '' }
+    ? { vex_status: v, decision: '', decision_rationale: '', accept_until: '', fix_version: '', fix_note: '' }
     : { vex_status: v })
   const advisory = () => {
     // Advisory-Entwurf (Anhang I Teil II Nr. 4) — Entwurf herunterladen; veröffentlichen muss der Hersteller.
@@ -505,8 +506,9 @@ function FindingDrawer({ finding, onClose }) {
       T('## Auswirkungen und Behebung', '## Impact and remediation'),
       T('- Status: behoben', '- Status: fixed'),
       T('- Behebung: ', '- Remediation: ') + (f.fix_version ? f.component_name + ' ' + f.fix_version
-          : f.fixed_versions ? T('Version ', 'Version ') + f.fixed_versions
-            : T('[Sicherheitsaktualisierung eintragen]', '[enter the security update]')),
+          : f.fix_note.trim() ? f.fix_note.trim()
+            : f.fixed_versions ? T('Version ', 'Version ') + f.fixed_versions
+              : T('[Sicherheitsaktualisierung eintragen]', '[enter the security update]')),
       T('- Maßnahmen für Nutzer: [eindeutige, verständliche Anleitung ergänzen]',
         '- Action for users: [add clear, understandable instructions]'),
       '',
@@ -605,17 +607,30 @@ function FindingDrawer({ finding, onClose }) {
 
       <div className="fieldlab">{t('Begründung der Betroffenheit')}</div>
       <textarea className="field" rows={2} value={f.vex_justification}
-        placeholder={nichtBetroffen ? t('z. B. die verwundbare Funktion wird bei uns nie aufgerufen') : t('Einschätzung, Analyse-Stand')}
+        placeholder={nichtBetroffen ? t('z. B. die verwundbare Funktion wird bei uns nie aufgerufen') : t('Einschätzung und Stand der Analyse')}
         onChange={e => set('vex_justification', e.target.value, { debounce: true })} />
       {nichtBetroffen && !f.vex_justification.trim() && (
         <div style={{ marginTop: 6 }}><Pill kind="amber">{t('Ohne Begründung ist „Nicht betroffen“ nicht belegt')}</Pill></div>
       )}
 
-      {!nichtBetroffen && <>
+      {/* Ist die Schwachstelle behoben, ist nichts mehr zu entscheiden — dann zaehlt nur noch,
+          was tatsaechlich getan wurde. Der Zielversionsknopf deckt nur den Versionssprung ab;
+          Konfigurationsaenderung, Rueckportierung oder Ausbau der Komponente brauchen Klartext. */}
+      {behoben && <>
+        <div className="fieldlab">{t('Wie wurde die Schwachstelle behoben?')}</div>
+        <textarea className="field" rows={2} value={f.fix_note}
+          placeholder={t('z. B. auf die behebende Version angehoben, Komponente ausgebaut, Korrektur zurückportiert')}
+          onChange={e => set('fix_note', e.target.value, { debounce: true })} />
+        {!f.fix_note.trim() && !f.fix_version && (
+          <div style={{ marginTop: 6 }}><Pill kind="amber">{t('Ohne Angabe ist „Behoben“ nicht belegt')}</Pill></div>
+        )}
+      </>}
+
+      {!nichtBetroffen && !behoben && <>
         <div className="fieldlab">{t('Entscheidung')}</div>
         <div style={{ display: 'flex', gap: 12 }}>
           <select className="field" style={{ flex: 1 }} value={f.decision} disabled={inPruefung}
-            title={inPruefung ? t('Erst nach der Bewertung der Betroffenheit') : undefined}
+            title={inPruefung ? t('Erst möglich, wenn die Betroffenheit bewertet ist') : undefined}
             onChange={e => set('decision', e.target.value)}>
             {DECISIONS.map(([v, label]) => <option key={v} value={v}>{t(label)}</option>)}
           </select>
@@ -632,6 +647,11 @@ function FindingDrawer({ finding, onClose }) {
         </>}
         {f.decision === 'accept' && !f.accept_until && (
           <div style={{ marginTop: 6 }}><Pill kind="amber">{t('Ein akzeptiertes Risiko braucht eine Befristung')}</Pill></div>
+        )}
+        {inPruefung && (
+          <div className="muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
+            {t('Eine Entscheidung ist erst möglich, wenn die Betroffenheit oben auf „Betroffen“ steht.')}
+          </div>
         )}
       </>}
 
